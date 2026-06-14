@@ -20,12 +20,12 @@ function keycloakGetClientSecret(): string
 
 function keycloakGetRedirectUri(): string
 {
-    return trim((string) config('KEYCLOAK_REDIRECT_URI', 'https://espace-client.gnl-solution.fr/keycloak_callback.php'));
+    return trim((string) config('KEYCLOAK_REDIRECT_URI', 'https://gestion.gnl-solution.fr/keycloak_callback.php'));
 }
 
 function keycloakGetPostLogoutRedirectUri(): string
 {
-    return trim((string) config('KEYCLOAK_POST_LOGOUT_REDIRECT_URI', 'https://espace-client.gnl-solution.fr/connexion'));
+    return trim((string) config('KEYCLOAK_POST_LOGOUT_REDIRECT_URI', 'https://gestion.gnl-solution.fr/connexion'));
 }
 
 function keycloakBuildAuthorizationUrl(): string
@@ -45,7 +45,7 @@ function keycloakBuildAuthorizationUrl(): string
         'client_id' => $clientId,
         'redirect_uri' => keycloakGetRedirectUri(),
         'response_type' => 'code',
-        'scope' => 'openid profile email kubernetes organization',
+        'scope' => 'openid profile email',
         'state' => $state,
         'nonce' => $nonce,
     ];
