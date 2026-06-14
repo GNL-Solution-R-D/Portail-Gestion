@@ -44,9 +44,6 @@ try {
     }
 
     $sessionUser = keycloakBuildSessionUser($claims);
-    if (trim((string) ($sessionUser['k8s_namespace'] ?? '')) === '') {
-        throw new RuntimeException('Le mapper Keycloak "namespace" est requis (scope kubernetes).');
-    }
 
     session_regenerate_id(true);
     $_SESSION['user'] = $sessionUser;
