@@ -1,0 +1,46 @@
+<IfModule mod_rewrite.c>
+    Options +FollowSymLinks
+    RewriteEngine On
+    Redirect 301 /accompagnement /formation
+
+    # Prevent potential loops
+    RewriteCond %{ENV:REDIRECT_STATUS} ^$
+
+    # Remove .php extension and check in pages/ directory
+    # Specific Legal Pages Rewrites
+    RewriteRule ^mentions-legales$ pages/mentions.php [L,QSA]
+    RewriteRule ^politique-confidentialite$ pages/privacy.php [L,QSA]
+    RewriteRule ^cgv$ pages/terms.php [L,QSA]
+
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{DOCUMENT_ROOT}/pages/$1.php -f
+    RewriteRule ^([^/]+)$ pages/$1.php [L,QSA]
+
+    # Fallback for root files (like index.php handling if needed, though index is usually default)
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}.php -f
+    RewriteRule ^([^\.]+)$ $1.php [NC,L]
+
+    # Custom Error Pages
+    ErrorDocument 404 /pages/404.php
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+</IfModule>
+
+# Browser Caching
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType image/jpg "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/gif "access plus 1 year"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+  ExpiresByType text/css "access plus 1 month"
+  ExpiresDefault "access plus 2 days"
+</IfModule>
+
+    # Dynamic Sitemap
+    RewriteRule ^sitemap\.xml$ sitemap.php [L]
+

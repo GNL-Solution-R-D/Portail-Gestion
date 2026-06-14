@@ -1,0 +1,87 @@
+.parametre-box {
+background-color: #fff;
+  padding: 20px;
+  border-radius: 2px;
+  text-align: left;
+  flex: 1;
+  min-width: 281px;
+  max-width: 281px;
+  font-size: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding-top: 10px;
+  padding-right: 20px;
+  padding-bottom: 10px;
+  padding-left: 20px;
+}
+
+/* Styles par d faut pour les zones de texte pendant le chargement */
+input, textarea {
+  background-color: #f0f0f0; /* Gris clair */
+  border: 1px solid #ccc; /* Bordure gris clair */
+  color: transparent; /* Rendre le texte transparent */
+  cursor: not-allowed; /* Curseur "interdit" */
+  position: relative;
+}
+
+/* Ajouter un effet de biffage */
+input::before, textarea::before {
+  content: ""; /* Cr e une ligne de "biffage" */
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  border-top: 2px solid #999; /* La ligne biff e */
+  transform: translateY(-50%);
+}
+
+.box200{
+max-height: 200px;
+}
+
+.parametre-box h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #777;
+  font-weight: bold;
+}
+
+.parametre-box form label {
+  display: block;
+  font-size: 14px;
+  color: #777;
+  margin-top: 10px;
+}
+
+.parametre-box form input,
+.parametre-box form select {
+  display: block;
+  font-size: 14px;
+  color: #777;
+  margin-top: 5px;
+  width: 240px;
+  height: 23px;
+  margin-bottom: 10px;
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 2px;
+  background-color: #fff;
+  box-sizing: border-box;
+}
+
+.parametre-box button {
+  background-color: #555;
+  color: #fff;
+  padding: 5px 10px;
+  border: none;
+  cursor: pointer;
+  border-radius: 2px;
+  margin-top: 10px;
+}
+
+.parametre-box button:hover {
+  background-color: #777;
+}
+
+.inline-form {
+  display: inline;
+}

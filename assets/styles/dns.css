@@ -1,0 +1,71 @@
+
+.containered {
+    /*! max-width: 900px; */
+    /*! margin: 20px; */
+    /*! background: white; */
+    /*! padding: 20px; */
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    padding-top: 1px;
+    /*! padding-right: 20px; */
+    /*! padding-bottom: 20px; */
+    /*! padding-left: 20px; */
+    margin-bottom: 20px;
+}
+
+h2, h3 {
+    color: #777;
+    /*! border-bottom: 2px solid #ddd; */
+    /*! padding-bottom: 5px; */
+    padding-left: 18px;
+    font-size: 14px;
+    font-weight: bold;
+    color: #777;
+    padding: 3px 20px;
+    /*! background-color: #f8f8f8; */
+    /*! border-bottom: 1px solid #ddd; */
+    /*! margin-bottom: 5px; */
+    padding-top: 6px;
+    padding-right: 20px;
+    /*! padding-bottom: 3px; */
+    padding-left: 20px;
+    background: white;
+    min-width: 246px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    /*! margin-bottom: 5px; */
+    font-size: 13px;
+    color: #777;
+    /*! border-collapse: collapse; */
+    background: white;
+}
+
+th, td {
+    /*! border: 1px solid #ddd; */
+    padding: 10px;
+    text-align: left;
+}
+
+.dns-domain {
+	min-width: 232px;
+}
+
+th {
+    background-color: #007BFF;
+    color: #777;
+}
+
+.dns-servers th, .dns-servers td {
+    text-align: center;
+    background-color: #fff;
+}
+
+.dns-zone th {
+    background-color: #fff;
+}
+
+.dns-zone tr:nth-child(even) {
+    background-color: #f7f7f7;
+}

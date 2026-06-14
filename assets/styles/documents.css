@@ -1,0 +1,128 @@
+/* Réinitialisation globale */
+* {
+  /*! margin: 0; */
+  /*! padding: 0; */
+  /*! box-sizing: border-box; */
+}
+
+/* Conteneur global de la page */
+.page-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* HEADER (bandeau supérieur) */
+.top-banner {
+  /*! width: 100%; */
+  /*! background-color: #fff; */
+  /*! border-bottom: 1px solid #ddd; */
+  /*! padding: 10px 20px; */
+}
+.header-content {
+  /*! display: flex; */
+  /*! justify-content: space-between; */
+  /*! align-items: center; */
+}
+.header-center {
+  flex-grow: 1;
+  text-align: right;
+  margin-right: 50px; /* Ajuste selon ta maquette */
+}
+.support {
+  font-size: 16px;
+  color: #555;
+}
+.header-right .user-info {
+  text-align: right;
+}
+.user-role {
+  font-size: 14px;
+  font-weight: bold;
+  color: #777;
+}
+.user-name {
+  font-size: 13px;
+  color: #777;
+}
+
+/* MAIN (contenu principal) */
+.main-content {
+  /*! flex: 1; */
+  /*! padding: 20px; */
+  /*! background-color: #E9E9E9; */
+}
+
+/* SECTION (ex: Attestation, Document, Modèle) */
+.section {
+  margin-bottom: 20px;
+  background-color: #fff;
+  /*! border: 1px solid #ccc; */
+  /*! border-bottom: 1px solid #ccc; */
+  padding: 10px 0;
+}
+.section-title {
+  font-size: 14px;
+  font-weight: bold;
+  color: #555;
+  padding: 2px 15px;
+  /*! background-color: #f8f8f8; */ /* léger gris */
+  /*! border-bottom: 1px solid #ddd; */
+  margin-bottom: 5px;
+}
+
+/* TABLEAU */
+.document-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #333;
+}
+.document-table thead tr {
+  background-color: #f1f1f1;
+  /*! border-bottom: 1px solid #ccc; */
+}
+
+/* Colonne Nom : alignement à gauche */
+.document-table th.col-nom,
+.document-table td.col-nom {
+  text-align: left;
+  max-width: 92px;
+}
+
+/* Colonne Taille : alignement centré */
+.document-table th.col-taille,
+.document-table td.col-taille {
+  text-align: center;
+}
+
+/* Colonne Télécharger : alignement à droite */
+.document-table th.col-download,
+.document-table td.col-download {
+  text-align: right;
+}
+
+.document-table th,
+.document-table td {
+  padding: 10px 15px;
+
+}
+.document-table tbody tr:not(:last-child) {
+  border-bottom: 1px solid #eee;
+}
+.document-table a {
+  color: #007bff;
+  text-decoration: none;
+}
+.document-table a:hover {
+  text-decoration: underline;
+}
+
+/* FOOTER */
+.page-footer {
+  text-align: center;
+  font-size: 11px;
+  color: #999;
+  padding: 10px 0;
+}
+

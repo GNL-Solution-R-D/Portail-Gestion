@@ -1,0 +1,27 @@
+
+input {
+  border-block-width: 0px;
+  border-block-color: #c1c1c1;
+  background-color: #ececec;
+  border: 0px;
+  padding: 3px;
+  color: #777;
+}
+
+select {
+  border-block-width: 0px;
+  border-block-color: #c1c1c1;
+  background-color: #ececec;
+  border: 0px;
+  padding: 3px;
+  color: #777;
+}
+
+button {
+  border-block-width: 0px;
+  border-block-color: #c1c1c1;
+  background-color: #ececec;
+  border: 0px;
+  padding: 3px;
+  color: #777;
+}

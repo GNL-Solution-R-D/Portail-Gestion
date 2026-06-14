@@ -1,0 +1,18 @@
+# Ignore sensitive configuration
+config.php
+
+# Ignore uploaded files
+uploads/
+
+# Ignore log files
+*.log
+
+# Ignore temporary directories
+/tmp/
+/temp/
+/tmp
+/temp
+
+# Ignore composer dependencies
+vendor/
+.phpunit.result.cache

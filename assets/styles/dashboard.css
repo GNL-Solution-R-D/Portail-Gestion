@@ -1,0 +1,485 @@
+/* RÃ??Ã?Â©initialisation globale */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background-color: #E9E9E9;
+  color: #333;
+}
+
+/* ----------------------------- */
+/* Header plein largeur */
+/* ----------------------------- */
+.top-banner {
+  width: 100%;
+  background-color: #fff;
+  border-bottom: 1px solid #ddd;
+  padding: 5px 20px;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Branding (colonne de gauche) */
+.header-left .branding h1 {
+  font-size: 24px;
+  color: #333;
+  margin: 0;
+}
+.header-left .branding a p {
+  font-size: 13px;
+  color: #777;
+  margin-top: -4px;
+  text-decoration: none !important;
+
+}
+
+.header-left .branding a d {
+  font-size: 25px;
+  color: #777;
+  text-align: center;
+  margin-left: 0px;
+  text-decoration: none !important;
+}
+
+.header-left .branding a {
+  color: inherit; /* Assure que la couleur héritée soit utilisée */
+  text-decoration: none !important; /* Force l'enlèvement du soulignement */
+}
+
+
+/* Centre d'Assistance (colonne centrale) */
+.header-center {
+  flex-grow: 1;
+  text-align: right;
+  margin-right: 50px;
+}
+.header-center .support {
+  font-size: 16px;
+  color: #777;
+  text-decoration: none !important;
+}
+
+/* Informations utilisateur (colonne de droite) */
+.header-right .user-info {
+  text-align: right;
+}
+.header-right .user-info .user-role {
+  display: block;
+  font-size: 16px;
+  font-weight: bold;
+  color: #777;
+}
+.header-right .user-info .user-name {
+  display: block;
+  font-size: 14px;
+  color: #777;
+}
+/* Cacher le menu par dÃ©faut */
+.user-dropdown {
+  display: none;
+  position: absolute;
+  top: 60px;
+  right: 20px;
+  background-color: white;
+  border: 1px solid #ccc;
+  width: 200px;
+  z-index: 999;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease-in-out, visibility 0.2s;
+  text-align: left; /* Aligner le texte Ã  droite */
+  width: 125px;
+}
+
+/* Retirer les puces des listes */
+.user-dropdown ul {
+  list-style-type: none; /* Retirer les points des listes */
+  padding: 0; /* Enlever le padding par dÃ©faut */
+  margin: 0; /* Enlever le margin par dÃ©faut */
+}
+
+/* Ajouter un style de fond au survol */
+.user-dropdown a:hover {
+  background-color: #f0f0f0;
+}
+
+/* Ajouter une couleur de fond diffÃ©rente pour un Ã©lÃ©ment sÃ©lectionnÃ© */
+.user-dropdown a.selected {
+  background-color: #f0f0f0;
+}
+
+/* Alignement du texte des Ã©lÃ©ments de menu */
+.user-dropdown a {
+  display: block;
+  padding: 5px;
+  text-decoration: none;
+  color: #333; /* Couleur du texte */
+}
+
+
+
+
+
+/* Conteneur global des stats */
+.stats {
+  display: flex;
+  flex-wrap: wrap;       /* Permet le retour Ã?Â  la ligne si lÃ??Ã?Â©cran est trop petit */
+  gap: 20px;             /* Espace horizontal/vertical entre chaque stat-box */
+  margin-bottom: 20px;
+}
+
+/* BoÃ?Â®te de statistique */
+.stat-box {
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  min-width: 180px;      /* Largeur minimum (Ã?Â  ajuster selon votre design) */
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  flex: 1;               /* Les boÃ?Â®tes sÃ??Ã?Â©tendent pour occuper lÃ??espace */
+  text-align: left;      /* Alignement du texte Ã?Â  gauche */
+}
+
+/* Ligne contenant le chiffre Ã?Â  gauche et le bloc texte Ã?Â  droite */
+.stat-line {
+  display: flex;
+  align-items: center;   /* Aligne verticalement le chiffre et le texte */
+  gap: 10px;             /* Espace entre le chiffre et le bloc texte */
+}
+
+/* Chiffre (gros) */
+.stat-number {
+  font-size: 46px;
+  font-weight: 350;
+  color: #777;
+  /*! text-align: right; */
+  margin-left: 5px;
+}
+
+/* Bloc texte (label + sous-texte) */
+.stat-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;              /* Espace vertical entre le label et le sous-texte */
+  margin-left: 13px;
+}
+
+/* Label (ex : Ã??VisiteursÃ??) */
+.stat-label {
+  font-size: 18px;
+  font-weight: 600;
+  color: #777;
+}
+
+/* Sous-texte (ex : Ã??sur 1 site et 2 domainesÃ??) */
+.stat-subtext {
+  font-size: 12px;
+  color: #777;
+  line-height: 1.3;
+}
+
+
+
+
+
+
+
+/* ----------------------------- */
+/* Conteneur principal */
+/* ----------------------------- */
+.container {
+  display: flex;
+}
+
+/* Sidebar (menu Ã??Ã?Â  gauche) */
+.sidebar {
+  width: 260px;
+  background-color: #F6F6F6;
+  color: #707070;
+  height: calc(100vh - 70px); /* Ajustez en fonction de la hauteur du header */
+  padding: 20px;
+}
+
+.sidebar h2 {
+  font-size: 24px;
+  margin-bottom: 10px;
+}
+
+.sidebar d {
+  font-size: 20px;
+  margin-bottom: 24px;
+  color: #777;
+}
+
+
+.sidebar nav ul.menu-items {
+  list-style: none;
+  /*! margin-bottom: 20px; */
+  padding: 0;
+}
+
+.sidebar nav ul.menu-items li {
+  padding: 2px;
+  /*! border-bottom: 1px solid #707070; */
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.sidebar nav ul.menu-items li a:hover {
+  background-color: #b4d8ff;
+}
+
+
+.sidebar nav ul.menu-items li a.active {
+  color: #fff;
+  text-decoration: none;
+  background-color: #007bff;
+}
+
+
+.sidebar nav ul.menu-items li a {
+  color: #777;
+  text-decoration: none;
+  display: block;
+  padding: 8px;
+}
+
+
+.sidebar nav ul.menu-items li.categorie {
+  font-weight: bold;
+  color: #777;
+  padding-top: 10px;
+  Padding-bottom: 5px;
+}
+
+/* Bloc danger dans la sidebar */
+.danger-zone {
+  margin-top: 10px;
+}
+
+.danger-zone .danger-block {
+  border: 0.5px solid red;
+  border-radius: 4px;
+  /*! padding: 10px; */
+  /*! padding-top: -1px; */
+  padding-right: 10px;
+  padding-bottom: -37px;
+  padding-left: 10px;
+}
+
+.danger-zone .danger-block ul.menu-items li {
+  padding: 2px 2px;
+  border: none;
+}
+
+.danger-zone .danger-text {
+  text-align: center;
+  font-weight: normal;
+  font-size: 10px;
+  color: red;
+  margin-top: 5px;
+}
+
+/* ----------------------------- */
+/* Contenu principal */
+/* ----------------------------- */
+.main-content {
+  flex: 1;
+  padding: 20px;
+}
+
+
+.stats {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.stat-box {
+  background-color: #fff;
+  /*! padding: 20px; */
+  border-radius: 2px;
+  text-align: left;
+  flex: 1;
+  min-width: 180px;
+  font-size: 16px;
+  font-weight: bold;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding-top: 10px;
+  padding-right: 20px;
+  padding-bottom: 10px;
+  padding-left: 20px;
+}
+
+.chart-container {
+  background-color: #fff;
+  padding: 25px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+
+
+
+
+
+
+/* Style général de l'alerte */
+.info {
+    position: relative;
+    padding: 10px 15px;
+    /*! margin: 10px 0; */
+    border-radius: 2px;
+    background-color: #76d1ff; /* Couleur de fond claire pour le type 'info' */
+    padding-left: 25px; /* Pour laisser de la place à la ligne verticale */
+    color: #fff;
+}
+
+/* Barre verticale à gauche : 3px de large, couleur plus foncée */
+.info.bar {
+    border-left: 3px solid #31708f; /* Couleur de la barre pour l'alerte info */
+}
+
+/* Titre en gras et espacé */
+.info .alert-title {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+/* Style spécifique pour le message (personnalisable) */
+.info .alert-message {
+    /* Ajoutez ici d'éventuels styles pour le message */
+}
+
+
+/* Style général de l'alerte */
+.error {
+    position: relative;
+    padding: 10px 15px;
+    margin: 10px 0;
+    border-radius: 2px;
+    background-color: #ffc06e; /* Couleur de fond claire pour le type 'info' */
+    padding-left: 25px; /* Pour laisser de la place à la ligne verticale */
+    color: #fff;
+}
+
+/* Barre verticale à gauche : 3px de large, couleur plus foncée */
+.error.bar {
+    border-left: 3px solid #ff6c00; /* Couleur de la barre pour l'alerte info */
+}
+
+/* Titre en gras et espacé */
+.error .alert-title {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+/* Style spécifique pour le message (personnalisable) */
+.error .alert-message {
+    /* Ajoutez ici d'éventuels styles pour le message */
+}
+
+
+/* Style général de l'alerte */
+.danger {
+    position: relative;
+    padding: 10px 15px;
+    margin: 10px 0;
+    border-radius: 2px;
+    background-color: #ff7a7a; /* Couleur de fond claire pour le type 'info' */
+    padding-left: 25px; /* Pour laisser de la place à la ligne verticale */
+    color: #fff;
+}
+
+/* Barre verticale à gauche : 3px de large, couleur plus foncée */
+.danger.bar {
+    border-left: 3px solid #f00; /* Couleur de la barre pour l'alerte info */
+}
+
+/* Titre en gras et espacé */
+.danger .alert-title {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+/* Style spécifique pour le message (personnalisable) */
+.danger .alert-message {
+    /* Ajoutez ici d'éventuels styles pour le message */
+}
+
+
+
+
+
+
+
+
+/* Conteneur global du graphique */
+.chart-container {
+  background-color: #fff;       /* Fond gris clair comme dans la capture */
+  /*! padding: 20px; */
+  border-radius: 2px;
+  position: relative;           /* Permet de positionner des Ã©lÃ©ments si besoin */
+  height: 400px;                /* Hauteur fixe ou adaptative, selon ta mise en page */
+  margin-bottom: 20px;
+  padding-top: 20px;
+  padding-right: 20px;
+  padding-bottom: 58px;
+  padding-left: 20px;
+  margin-top: 20px;
+}
+
+/* Titre du graphique */
+.chart-title {
+  margin-bottom: 5px;
+  font-size: 14px;
+  color: #777;
+}
+
+/* Sous-titre (ex : asso.openhebergement.cloud) */
+.chart-subtitle {
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #777;
+}
+
+/* Note de bas de graphique (ex : Â© OpenHebergement) */
+.chart-footer {
+  position: absolute;
+  bottom: 5px;
+  right: 10px;
+  font-size: 10px;
+  color: #888;
+  margin: 0;
+}
+
+/* Ajustement du canvas pour qu'il occupe tout l'espace disponible */
+.chart-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+
+/* ----------------------------- */
+/* Copyright */
+/* ----------------------------- */
+.coppyright {
+  /*! background-color: #FFAA00; */
+  color: #707070;
+  /*! padding: 15px; */
+  /*! border-radius: 4px; */
+  text-align: center;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+
