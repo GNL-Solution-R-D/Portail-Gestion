@@ -132,11 +132,15 @@ header('X-Content-Type-Options: nosniff');
 const N8N_PORTAIL_URL = 'https://api.gnl-solution.fr/webhook/data-portail';
 
 // ── Contrôle d'accès « support » (console gestion-ticket.php) ──────────────────
-// Un utilisateur est considéré comme agent support s'il remplit AU MOINS un critère
-// (voir user_is_support()). Ajustez ces listes à votre organisation. Laissez vides
-// pour désactiver le critère correspondant. Le garde reste « fail-closed ».
-const TICKET_SUPPORT_EMAIL_DOMAINS = ['gnl-solution.fr']; // ex. e-mails internes
-const TICKET_SUPPORT_SIRETS        = [];                   // ex. ['12345678900012'] (structure interne GNL)
+// Si CE déploiement est entièrement dédié au support (tous les comptes connectés
+// sont des agents), laissez TICKET_SUPPORT_SITE = true : tout utilisateur authentifié
+// est alors considéré comme support, sans heuristique.
+//
+// ⚠️  Si ce MÊME proxy sert aussi un portail CLIENT, repassez-le à false : le contrôle
+//     par rôle / domaine e-mail / SIRET ci-dessous s'appliquera alors (fail-closed).
+const TICKET_SUPPORT_SITE          = true;
+const TICKET_SUPPORT_EMAIL_DOMAINS = ['gnl-solution.fr']; // utilisé seulement si TICKET_SUPPORT_SITE = false
+const TICKET_SUPPORT_SIRETS        = [];                   // idem
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  Helpers communs
@@ -1057,6 +1061,9 @@ function dot_civility_name(string $name): string
  */
 function user_is_support(array $user): bool
 {
+    if (TICKET_SUPPORT_SITE) {
+        return true; // déploiement entièrement dédié au support
+    }
     $role = s_lower(trim((string)(pick($user, ['role', 'type', 'profil', 'profile']) ?? '')));
     if (in_array($role, ['support', 'staff', 'agent', 'admin', 'gnl', 'interne'], true)) {
         return true;
