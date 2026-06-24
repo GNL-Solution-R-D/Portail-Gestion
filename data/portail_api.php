@@ -16,7 +16,7 @@
  *
  * ── Différences avec les anciens fichiers ─────────────────────────────────────
  *   1) Un SEUL webhook n8n est utilisé pour tout (lecture ET écriture) :
- *          https://api.gnl-solution.fr/webhook/data-portail   (méthode POST)
+ *          https://api.gnl-solution.fr/webhook/portail-gestion-infrastructure   (méthode POST)
  *   2) Le champ "action" est PRÉFIXÉ par le module. n8n aiguille via un nœud
  *      Switch sur {{ $json.action }}. Exemples :
  *          "domain.list"          au lieu de "list"
@@ -129,7 +129,7 @@ header('X-Content-Type-Options: nosniff');
 // ══════════════════════════════════════════════════════════════════════════════
 //  Configuration : UN SEUL webhook n8n, toujours en POST.
 // ══════════════════════════════════════════════════════════════════════════════
-const N8N_PORTAIL_URL = 'https://api.gnl-solution.fr/webhook/data-portail';
+const N8N_PORTAIL_URL = 'https://api.gnl-solution.fr/webhook/portail-gestion-infrastructure';
 
 // ── Contrôle d'accès « support » (console gestion-ticket.php) ──────────────────
 // Si CE déploiement est entièrement dédié au support (tous les comptes connectés
