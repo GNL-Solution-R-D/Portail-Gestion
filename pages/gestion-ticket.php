@@ -34,37 +34,9 @@ if (accountSessionsIsCurrentSessionRevoked($pdo, (int) $_SESSION['user']['id']))
 }
 accountSessionsTouchCurrent($pdo, (int) $_SESSION['user']['id']);
 
-/** Doit rester cohérent avec user_is_support() / TICKET_SUPPORT_* du proxy. */
-function gt_is_support(array $u): bool
-{
-    $low  = static fn($v) => function_exists('mb_strtolower') ? mb_strtolower((string) $v, 'UTF-8') : strtolower((string) $v);
-    $role = $low(trim((string) ($u['role'] ?? $u['type'] ?? $u['profil'] ?? $u['profile'] ?? '')));
-    if (in_array($role, ['support', 'staff', 'agent', 'admin', 'gnl', 'interne'], true)) {
-        return true;
-    }
-    foreach (['is_support', 'is_staff', 'is_admin', 'support', 'staff', 'admin'] as $f) {
-        if (!empty($u[$f]) && filter_var($u[$f], FILTER_VALIDATE_BOOLEAN)) {
-            return true;
-        }
-    }
-    $emailDomains = ['gnl-solution.fr'];           // ↔ TICKET_SUPPORT_EMAIL_DOMAINS
-    $sirets       = [];                             // ↔ TICKET_SUPPORT_SIRETS
-    $email = $low(trim((string) ($u['email'] ?? '')));
-    $at    = strrchr($email, '@');
-    if ($at !== false && in_array(ltrim($at, '@'), $emailDomains, true)) {
-        return true;
-    }
-    $siret = preg_replace('/\s+/', '', (string) ($u['siret'] ?? ''));
-    if ($siret !== '' && in_array($siret, $sirets, true)) {
-        return true;
-    }
-    return false;
-}
-
-if (!gt_is_support($_SESSION['user'])) {
-    header('Location: /?error=' . urlencode('Accès réservé à l’équipe support.'));
-    exit;
-}
+// Ce site est dédié au support : l'accès est géré en amont (authentification du
+// portail support). Aucune restriction de rôle supplémentaire ici. Le proxy garde
+// require_support(), neutralisé par TICKET_SUPPORT_SITE = true côté data/portail_api.php.
 
 if (!isset($_SESSION['csrf']) || !is_string($_SESSION['csrf']) || $_SESSION['csrf'] === '') {
     $_SESSION['csrf'] = bin2hex(random_bytes(16));
