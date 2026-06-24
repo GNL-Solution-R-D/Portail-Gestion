@@ -316,7 +316,7 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['csrf'])) {
     <div class="relative flex items-center gap-8">
       <a href="./dashboard" class="rounded-md px-2.5 py-2 transition-colors">
         <p class="mt-1 ml-1 text-base font-semibold">GNL Solution</p>
-        <p class="mt-1 ml-1 text-base font-semibold">Portail Gestion Entreprise</p>
+        <p class="mt-1 ml-1 text-base font-semibold">Portail Gestion Infrasructure</p>
       </a>
 
       <div class="ml-auto flex items-center gap-2">
