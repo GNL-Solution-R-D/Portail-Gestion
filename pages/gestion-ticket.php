@@ -121,10 +121,11 @@ $searchPlaceholder = 'Rechercher (objet, client, référence…)';
     .field label{font-size:.82rem;font-weight:600;}
     .field textarea{width:100%;border-radius:.6rem;border:1px solid var(--border);background:var(--background);padding:.55rem .7rem;font-size:.9rem;color:inherit;font-family:inherit;min-height:90px;resize:vertical;}
 
-    .thread{display:flex;flex-direction:column;gap:.75rem;max-height:42vh;overflow-y:auto;padding-right:.25rem;margin-bottom:1rem;}
-    .msg{border:1px solid var(--border);border-radius:.7rem;padding:.7rem .85rem;background:var(--background);}
-    .msg.support{background:rgba(59,130,246,.07);border-color:rgba(59,130,246,.3);}
-    .msg-meta{display:flex;justify-content:space-between;gap:.5rem;font-size:.74rem;color:var(--muted-foreground,#64748b);margin-bottom:.3rem;}
+    .thread{display:flex;flex-direction:column;gap:.55rem;max-height:42vh;overflow-y:auto;padding-right:.25rem;margin-bottom:1rem;}
+    .msg{max-width:80%;border:1px solid var(--border);border-radius:.95rem;padding:.55rem .8rem;background:var(--background);}
+    .msg.them{align-self:flex-start;background:rgba(148,163,184,.16);border-color:rgba(148,163,184,.30);border-bottom-left-radius:.3rem;}
+    .msg.mine{align-self:flex-end;background:rgba(34,197,94,.16);border-color:rgba(34,197,94,.32);border-bottom-right-radius:.3rem;}
+    .msg-meta{display:flex;justify-content:space-between;align-items:center;gap:.9rem;font-size:.72rem;color:var(--muted-foreground,#64748b);margin-bottom:.25rem;}
     .msg-author{font-weight:700;color:inherit;display:inline-flex;align-items:center;}
     .msg-body{font-size:.88rem;white-space:pre-wrap;word-break:break-word;}
 
@@ -274,6 +275,8 @@ $searchPlaceholder = 'Rechercher (objet, client, référence…)';
     const API = new URL('../data/portail_api.php', window.location.href);
 
     // Badge certifié (sceau + coche) pour les messages du support.
+    // Côté du visiteur (agent support) : à droite, style WhatsApp.
+    const OWN_SIDE = 'support';
     const CERTIF = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 1l2.6 1.9 3.2-.2 1 3L22.4 9l-1 3 1 3-2.6 1.9-1 3-3.2-.2L12 23l-2.6-1.9-3.2.2-1-3L2.6 15l1-3-1-3 2.6-1.9 1-3 3.2.2L12 1z"/><path d="M10.6 14.3l-2-2-1.2 1.2 3.2 3.2 5.4-5.4-1.2-1.2-4.2 4.2z" fill="#fff"/></svg>';
 
     let tickets = [];
@@ -473,10 +476,11 @@ $searchPlaceholder = 'Rechercher (objet, client, référence…)';
 
     function bubble(m) {
       const support = m.author_type === 'support';
+      const mine = m.author_type === OWN_SIDE;
       const when = m.created_label || m.created_at || '';
       const full = m.created_at || '';
       const badge = support ? `<span class="certif" title="Support certifié GNL Solution">${CERTIF}</span>` : '';
-      return `<div class="msg ${support ? 'support' : ''}">
+      return `<div class="msg ${mine ? 'mine' : 'them'}">
         <div class="msg-meta"><span class="msg-author">${esc(m.author)}${badge}</span><span title="${esc(full)}">${esc(when)}</span></div>
         <div class="msg-body">${esc(m.body)}</div>
       </div>`;
