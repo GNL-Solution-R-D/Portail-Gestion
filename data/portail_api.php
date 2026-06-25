@@ -2040,37 +2040,46 @@ try {
                 return ($a['created_ts'] ?? 0) <=> ($b['created_ts'] ?? 0);
             });
 
-            // Civilité de l'initiateur : depuis la session si disponible, sinon détectée
-            // dans l'un de ses messages (ex. « M Gabin Grobost »). On l'applique ensuite
-            // à TOUS ses messages → « M. Gabin Grobost » de façon homogène.
-            $meCiv = civility_label(pick($user, ['civilite', 'civility', 'civility_code'], ''));
-            if ($meCiv === '') {
+            // Style WhatsApp + identité :
+            //  - « mes » messages (auteur = utilisateur connecté) → à droite + nom canonique ;
+            //  - les autres intervenants → à gauche, leur propre nom (déjà normalisé).
+            $me     = (string) $clientId;
+            $myName = user_display_name($user);
+            // Si la session n'a pas de civilité, on la récupère dans MES propres messages.
+            if (!preg_match('/^(M\.|Mme|Mlle|Dr|Me)\b/u', $myName)) {
                 foreach ($messages as $m) {
-                    if (($m['author_type'] ?? '') === 'client'
+                    $mid = (string)($m['client_id'] ?? '');
+                    $aid = (string)($m['agent_id'] ?? '');
+                    if (($mid === $me || $aid === $me)
                         && preg_match('/^(M|Mr|Mme|Mlle|Dr|Me|Monsieur|Madame|Mademoiselle|Docteur)\.?\s+/iu', (string)$m['author'], $mm)) {
-                        $meCiv = civility_label($mm[1]);
+                        $myName = trim(civility_label($mm[1]) . ' ' . strip_civility($myName !== '' ? $myName : (string)$m['author']));
                         break;
                     }
                 }
             }
-            if ($meCiv !== '') {
-                foreach ($messages as &$m) {
-                    if (($m['author_type'] ?? '') === 'client') {
-                        $bare = strip_civility((string)$m['author']);
-                        $m['author'] = $bare !== '' ? $meCiv . ' ' . $bare : $meCiv;
-                    }
+
+            foreach ($messages as &$m) {
+                $mid  = (string)($m['client_id'] ?? '');
+                $aid  = (string)($m['agent_id'] ?? '');
+                $mine = ($me !== '' && (($mid !== '' && $mid === $me) || ($aid !== '' && $aid === $me)));
+                $m['mine'] = $mine;
+                if ($mine && $myName !== '') {
+                    $m['author'] = $myName;
                 }
-                unset($m);
             }
+            unset($m);
 
             if ($ticketRow !== null) {
                 $ticket = normalize_ticket($ticketRow);
                 $ticket['messages'] = $messages;
+                $ticket['mine_owner'] = ((string)($ticket['client_id'] ?? '') === $me && $me !== '');
             } else {
                 // Pas de ligne ticket : la page complète les métadonnées depuis ticket.list.
+                // Côté client, le message initial appartient au client connecté.
                 $ticket = [
-                    'id'       => is_numeric($id) ? (int) $id : $id,
-                    'messages' => $messages,
+                    'id'         => is_numeric($id) ? (int) $id : $id,
+                    'messages'   => $messages,
+                    'mine_owner' => true,
                 ];
             }
 
@@ -2296,11 +2305,26 @@ try {
 
             [$ticketRow, $messages] = extract_ticket_and_messages($resp['json']);
 
+            // Style WhatsApp : « mes » messages (= cet agent support) à droite + nom canonique.
+            $me     = (string) $clientId;
+            $myName = user_display_name($user);
+            foreach ($messages as &$m) {
+                $mid  = (string)($m['client_id'] ?? '');
+                $aid  = (string)($m['agent_id'] ?? '');
+                $mine = ($me !== '' && (($mid !== '' && $mid === $me) || ($aid !== '' && $aid === $me)));
+                $m['mine'] = $mine;
+                if ($mine && $myName !== '') {
+                    $m['author'] = $myName;
+                }
+            }
+            unset($m);
+
             if ($ticketRow !== null) {
                 $ticket = normalize_ticket($ticketRow);
                 $ticket['messages'] = $messages;
+                $ticket['mine_owner'] = false; // le créateur est le client, pas l'agent
             } else {
-                $ticket = ['id' => is_numeric($id) ? (int) $id : $id, 'messages' => $messages];
+                $ticket = ['id' => is_numeric($id) ? (int) $id : $id, 'messages' => $messages, 'mine_owner' => false];
             }
 
             send_json(200, ['ok' => true, 'ticket' => $ticket]);
