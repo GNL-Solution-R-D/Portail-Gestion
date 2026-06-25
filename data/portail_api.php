@@ -1281,6 +1281,8 @@ function normalize_ticket_message(array $row): array
         'body'          => trim((string)pick($row, ['body', 'message', 'content', 'text'], '')),
         'author'        => dot_civility_name(trim((string)pick($row, ['author_name', 'authorName', 'author', 'name', 'user', 'from_name'], $isSupport ? 'Support GNL' : 'Vous'))),
         'author_type'   => $isSupport ? 'support' : 'client',
+        'agent_id'      => (string)pick($row, ['agent_id', 'agentId'], ''),
+        'client_id'     => (string)pick($row, ['client_id', 'clientId'], ''),
         'created_at'    => ticket_datetime($createdTs, true), // complet (info-bulle)
         'created_label' => ticket_msg_when($createdTs),       // relatif (affiché)
         'created_ts'    => $createdTs,
