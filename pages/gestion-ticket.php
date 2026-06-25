@@ -280,8 +280,9 @@ $searchPlaceholder = 'Rechercher (objet, client, référence…)';
     const VIEWER_KIND = 'support';
     // Mes messages (= cet agent) à droite ; clients et AUTRES agents à gauche.
     function isMine(m) {
-      if (VIEWER_KIND === 'support') return m.author_type === 'support' && String(m.agent_id || '') === VIEWER_ID;
-      return m.author_type !== 'support' && String(m.client_id || '') === VIEWER_ID;
+      if (typeof m.mine === 'boolean') return m.mine; // calculé serveur (client_id/agent_id vs session)
+      const me = String(VIEWER_ID || '');
+      return me !== '' && (String(m.client_id || '') === me || String(m.agent_id || '') === me);
     }
     const CERTIF = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 1l2.6 1.9 3.2-.2 1 3L22.4 9l-1 3 1 3-2.6 1.9-1 3-3.2-.2L12 23l-2.6-1.9-3.2.2-1-3L2.6 15l1-3-1-3 2.6-1.9 1-3 3.2.2L12 1z"/><path d="M10.6 14.3l-2-2-1.2 1.2 3.2 3.2 5.4-5.4-1.2-1.2-4.2 4.2z" fill="#fff"/></svg>';
 
@@ -471,7 +472,7 @@ $searchPlaceholder = 'Rechercher (objet, client, référence…)';
       if (msgs.length) {
         msgs.forEach((m) => thread.push(bubble(m)));
       } else if (t.message) {
-        thread.push(bubble({ author: t.created_by || 'Client', author_type: 'client', body: t.message, created_at: t.created_full || t.created_at }));
+        thread.push(bubble({ author: t.created_by || 'Client', author_type: 'client', mine: (typeof t.mine_owner === 'boolean' ? t.mine_owner : false), body: t.message, created_at: t.created_full || t.created_at }));
       }
       $('#d-thread').innerHTML = thread.join('') || '<div class="state-msg" style="padding:0;">Aucun message.</div>';
       const thr = $('#d-thread'); thr.scrollTop = thr.scrollHeight;
