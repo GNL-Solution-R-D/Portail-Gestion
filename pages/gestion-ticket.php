@@ -468,12 +468,17 @@ $searchPlaceholder = 'Rechercher (objet, client, référence…)';
         `<span><b>Créé le :</b> ${esc(t.created_at || '—')}</span>`;
 
       const msgs = Array.isArray(t.messages) ? t.messages : [];
+      const initial = (t.message || '').trim();
+      const firstIsInitial = msgs.length > 0 && initial !== '' && (msgs[0].body || '').trim() === initial;
       const thread = [];
-      if (msgs.length) {
-        msgs.forEach((m) => thread.push(bubble(m)));
-      } else if (t.message) {
-        thread.push(bubble({ author: t.created_by || 'Client', author_type: 'client', mine: (typeof t.mine_owner === 'boolean' ? t.mine_owner : false), body: t.message, created_at: t.created_full || t.created_at }));
+      if (initial !== '' && !firstIsInitial) {
+        thread.push(bubble({
+          author: t.created_by || 'Client', author_type: 'client',
+          mine: (typeof t.mine_owner === 'boolean' ? t.mine_owner : false),
+          body: initial, created_at: t.created_full || t.created_at,
+        }));
       }
+      msgs.forEach((m) => thread.push(bubble(m)));
       $('#d-thread').innerHTML = thread.join('') || '<div class="state-msg" style="padding:0;">Aucun message.</div>';
       const thr = $('#d-thread'); thr.scrollTop = thr.scrollHeight;
 
