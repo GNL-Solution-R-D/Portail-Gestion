@@ -1,5 +1,5 @@
 <?php
-session_start();
+/* URL héritée : /login.php -> page de connexion du portail (/connexion). */
 
-header('Location: /keycloak_login.php');
-exit();
+header('Location: /connexion', true, 302);
+exit;

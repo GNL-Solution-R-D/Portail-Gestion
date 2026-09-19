@@ -51,9 +51,11 @@
  *     order.list            GET                       → { ok, count, orders:[...] }
  *     order.detail          GET   ?id= | ?ref=        → { ok, count, orders:[...] }
  *   ÉQUIPES
- *     team.list             GET                       → { ok, count, members:[...], structure, can_edit }
+ *     team.list             GET                       → { ok, count, members:[...], structure, source, truncated, can_edit:false }
+ *                                 Source de vérité : les comptes du realm Keycloak,
+ *                                 lus via l'Admin REST. Voir include/keycloak_directory.php.
+ *                                 LECTURE SEULE (pas d'action team.update).
  *     team.ensure           POST  CSRF                → { ok, message, row? }   (provisionne la ligne « team » du client courant)
- *     team.update           POST  CSRF + droits       → { ok, message }
  *   DÉPLOIEMENTS (renommage « Mes services »)
  *     deployment.list       GET                       → { ok, deployments:[...] }
  *     deployment.rename     POST  CSRF                → { ok, row }
@@ -804,6 +806,89 @@ function normalize_member(array $row): array
         'perm_id'      => $permId,
         'permission'   => permission_label($permId),
         'structure'    => trim((string)(pick($row, ['structure', 'company', 'socname', 'raison']) ?? '')),
+    ];
+}
+
+/**
+ * Normalise un compte renvoyé par l'Admin REST Keycloak (GET /users) dans la
+ * même forme que normalize_member() : la page /equipes ne voit aucune
+ * différence. L'identifiant est l'UID Keycloak (chaîne), pas un entier.
+ */
+function normalize_kc_member(array $m, string $structure): array
+{
+    $attrs = [];
+    if (isset($m['attributes']) && is_array($m['attributes'])) {
+        foreach ($m['attributes'] as $k => $v) {
+            if (is_array($v)) {
+                $attrs[(string)$k] = (isset($v[0]) && is_scalar($v[0])) ? trim((string)$v[0]) : '';
+            } elseif (is_scalar($v)) {
+                $attrs[(string)$k] = trim((string)$v);
+            }
+        }
+    }
+    $attr = static function (array $keys) use ($attrs): string {
+        foreach ($keys as $k) {
+            if (isset($attrs[$k]) && $attrs[$k] !== '') {
+                return $attrs[$k];
+            }
+        }
+        return '';
+    };
+
+    $firstName = trim((string)($m['firstName'] ?? ''));
+    $lastName  = trim((string)($m['lastName'] ?? ''));
+    $email     = trim((string)($m['email'] ?? ''));
+    $username  = trim((string)($m['username'] ?? ''));
+
+    $name = trim($firstName . ' ' . $lastName);
+    if ($name === '') {
+        $name = $username !== '' ? $username : ($email !== '' ? $email : 'Utilisateur');
+    }
+
+    $initials = s_upper(
+        ($firstName !== '' ? s_sub($firstName, 0, 1) : '')
+        . ($lastName !== '' ? s_sub($lastName, 0, 1) : '')
+    );
+    if ($initials === '') {
+        $base = $username !== '' ? $username : $email;
+        $initials = $base !== '' ? s_upper(s_sub($base, 0, 2)) : '#';
+    }
+
+    // Statut : compte activé/désactivé dans Keycloak.
+    $enabled     = !array_key_exists('enabled', $m) || (bool)$m['enabled'];
+    $statusLabel = $enabled ? 'Actif' : 'Inactif';
+
+    $function = $attr(['fonction', 'poste', 'job', 'job_title', 'jobTitle', 'function', 'title']);
+
+    // Permission : attribut explicite, sinon libellé générique.
+    $permRaw = $attr(['perm_id', 'permission', 'role_id']);
+    $permId  = null;
+    if ($permRaw !== '' && is_numeric($permRaw)) {
+        $permId     = (int)$permRaw;
+        $permission = permission_label($permId);
+    } elseif ($permRaw !== '') {
+        $permission = $permRaw;
+    } else {
+        $permission = 'Compte Keycloak';
+    }
+
+    $orgLabel = $attr(['nom_commercial', 'raison', 'raison_social', 'structure', 'organization']);
+
+    return [
+        'id'           => trim((string)($m['id'] ?? '')),
+        'name'         => $name,
+        'secondary'    => $email !== '' ? $email : ($username !== '' ? $username : 'Compte Keycloak'),
+        'initials'     => $initials,
+        'function'     => $function !== '' ? $function : 'Aucune fonction définie',
+        'fonction'     => $function,
+        'email'        => $email,
+        'username'     => $username,
+        'status_label' => $statusLabel,
+        'status_class' => team_status_class($statusLabel),
+        'active'       => $enabled ? 1 : 0,
+        'perm_id'      => $permId,
+        'permission'   => $permission,
+        'structure'    => $orgLabel !== '' ? $orgLabel : $structure,
     ];
 }
 
@@ -1697,30 +1782,48 @@ try {
         // ─────────────────────────────────────────────────────────────────────
         //  ÉQUIPES
         // ─────────────────────────────────────────────────────────────────────
+        // Source de vérité : les COMPTES du realm Keycloak (Admin REST), et non
+        // plus la table « team » de n8n. Le portail gestion n'utilise pas la
+        // fonctionnalité « Organizations » : on liste donc tous les comptes du
+        // realm. Lecture seule : can_edit est toujours false ici.
         case 'team.list': {
-            $resp = n8n_call([
-                'action'    => 'team.list',
-                'client_id' => $clientId,
-                'siret'     => $currentSiret,
-            ]);
-            ensure_ok($resp);
+            require_once __DIR__ . '/../include/keycloak_directory.php';
 
-            $rows    = extract_rows($resp['json'], ['members', 'membres', 'contacts', 'users'], ['id', 'email', 'nom', 'lastname']);
-            $members = array_map('normalize_member', $rows);
+            // NB : HTTP 200 + ok:false (et non 502), comme le catch en bas de
+            // fichier — le middleware Traefik « custom-errors » remplace le
+            // corps de toute réponse 5xx et effacerait le message d'erreur.
+            $fetched = kcDirUsers();
+            if (!$fetched['ok']) {
+                send_json(200, [
+                    'ok'    => false,
+                    'code'  => 502,
+                    'error' => $fetched['error'] !== '' ? $fetched['error'] : 'Comptes Keycloak indisponibles.',
+                ]);
+            }
 
             $structure = $sessionStructure;
-            if (is_array($resp['json']) && !empty($resp['json']['structure'])) {
-                $structure = trim((string)$resp['json']['structure']);
-            } elseif (!empty($members[0]['structure'])) {
-                $structure = $members[0]['structure'];
-            }
+
+            $members = array_map(
+                static function ($row) use ($structure) {
+                    return normalize_kc_member(is_array($row) ? $row : [], $structure);
+                },
+                $fetched['members']
+            );
+
+            // Tri alphabétique stable (l'Admin REST ne garantit pas d'ordre).
+            usort($members, static function (array $a, array $b): int {
+                return strcmp(s_lower($a['name']), s_lower($b['name']))
+                    ?: strcmp((string)$a['id'], (string)$b['id']);
+            });
 
             send_json(200, [
                 'ok'        => true,
                 'count'     => count($members),
                 'members'   => $members,
                 'structure' => $structure,
-                'can_edit'  => $canEdit,
+                'can_edit'  => false,
+                'source'    => 'keycloak',
+                'truncated' => (bool)$fetched['truncated'],
             ]);
         }
 
@@ -1757,48 +1860,9 @@ try {
             send_json(200, ['ok' => true, 'message' => 'Équipe initialisée.', 'row' => $row]);
         }
 
-        case 'team.update': {
-            require_post();
-            csrf_check();
-
-            if (!$canEdit) {
-                send_json(403, ['ok' => false, 'error' => "Vous n'avez pas les droits pour modifier les membres de cette structure."]);
-            }
-
-            $memberId = (int)($_POST['member_id'] ?? 0);
-            if ($memberId <= 0) {
-                send_json(400, ['ok' => false, 'error' => 'Membre invalide.']);
-            }
-
-            $email    = trim((string)($_POST['email'] ?? ''));
-            $fonction = trim((string)($_POST['fonction'] ?? ''));
-            $statutIn = s_lower(trim((string)($_POST['statut'] ?? '')));
-            $active   = in_array($statutIn, ['1', 'actif', 'active', 'on', 'enabled', 'true'], true) ? 1 : 0;
-
-            if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                send_json(400, ['ok' => false, 'error' => 'Adresse e-mail invalide.']);
-            }
-
-            $resp = n8n_call([
-                'action'    => 'team.update',
-                'client_id' => $clientId,
-                'siret'     => $currentSiret,
-                'member_id' => $memberId,
-                'email'     => $email,
-                'fonction'  => $fonction,
-                'statut'    => $active,
-                'active'    => $active,
-            ]);
-
-            if ($resp['status'] !== 0 && ($resp['status'] < 200 || $resp['status'] >= 300)) {
-                send_json($resp['status'], ['ok' => false, 'error' => 'La mise à jour a échoué (n8n HTTP ' . $resp['status'] . ').']);
-            }
-            if (is_array($resp['json']) && array_key_exists('ok', $resp['json']) && $resp['json']['ok'] === false) {
-                send_json(502, ['ok' => false, 'error' => (string)($resp['json']['error'] ?? 'La mise à jour a échoué.')]);
-            }
-
-            send_json(200, ['ok' => true, 'message' => 'Le membre a été mis à jour.']);
-        }
+        // « team.update » a été RETIRÉ : Keycloak est la source de vérité et la
+        // page /equipes est en lecture seule, comme sur l'espace client. Toute
+        // modification d'un compte se fait dans la console Keycloak.
 
         // ─────────────────────────────────────────────────────────────────────
         //  DÉPLOIEMENTS (renommage « Mes services »)

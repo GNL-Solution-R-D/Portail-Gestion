@@ -12,6 +12,23 @@
     RewriteRule ^politique-confidentialite$ pages/privacy.php [L,QSA]
     RewriteRule ^cgv$ pages/terms.php [L,QSA]
 
+    # --- Compat ".php" : servi EN INTERNE depuis pages/, jamais par Redirect --
+    # Une redirection vers une URL qui redirige a son tour fait boucler les
+    # sondes Kubernetes (10 sauts maxi) -> probe KO -> CrashLoopBackOff.
+    # Ici on reecrit (reponse 200), on ne redirige pas.
+
+    # /connexion.php : force vers la vraie page, meme si un ancien stub traine
+    # a la racine du docroot deploye (c'est lui qui bouclait sur lui-meme).
+    RewriteCond %{DOCUMENT_ROOT}/pages/connexion.php -f
+    RewriteRule ^connexion\.php$ pages/connexion.php [L,QSA]
+
+    # Cas general : /xxx.php -> pages/xxx.php si le fichier est absent a la
+    # racine. C'est cette regle qui sert /equipes.php depuis pages/equipes.php.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{DOCUMENT_ROOT}/pages/$1.php -f
+    RewriteRule ^([^/]+)\.php$ pages/$1.php [L,QSA]
+
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{DOCUMENT_ROOT}/pages/$1.php -f
     RewriteRule ^([^/]+)$ pages/$1.php [L,QSA]

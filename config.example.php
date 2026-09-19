@@ -107,4 +107,73 @@ try {
     }
     $pdo_powerdns = null;
 }
+
+/**
+ * ── Keycloak : CONNEXION REST (page /connexion) ─────────────────────────────
+ *
+ * Le portail gestion utilise le même mécanisme que l'espace client : un
+ * formulaire maison (identifiant + mot de passe) qui interroge Keycloak en
+ * « Direct Access Grant », puis délègue la construction de $_SESSION['user']
+ * à keycloakBuildSessionUser(). Voir include/keycloak_rest.php et
+ * pages/connexion.php. Le flow « code » (/keycloak_login.php →
+ * /keycloak_callback.php) reste disponible en repli SSO / MFA.
+ *
+ * ⚠️ Contrairement à l'espace client, il n'y a PAS de prise en charge des
+ *    organisations Keycloak : pas de page /organisation, pas de scope
+ *    « organization », pas d'exigence de namespace Kubernetes. Un grant
+ *    réussi ouvre directement la session.
+ *
+ * À faire une fois côté Keycloak, sur le client KEYCLOAK_CLIENT_ID :
+ *      - « Client authentication » = ON (client confidentiel, avec secret) ;
+ *      - « Direct access grants »  = ON (sinon le formulaire renvoie
+ *        « La connexion directe n'est pas activée côté serveur »).
+ *
+ * Réglages optionnels :
+ *   KEYCLOAK_SCOPES               scopes du grant password.
+ *                                 Défaut : « openid profile email ».
+ *   KEYCLOAK_ALLOW_REGISTRATION=1 affiche le lien « Créer un compte ».
+ *                                 Défaut : 0 (masqué).
+ *   KEYCLOAK_LOGO_URL             logo affiché au-dessus de la carte.
+ *   KEYCLOAK_ADMIN_CLIENT_ID      client dédié pour l'Admin REST (mot de passe
+ *   KEYCLOAK_ADMIN_CLIENT_SECRET  oublié). Par défaut on réutilise le client
+ *                                 du portail.
+ *
+ * Le lien « Mot de passe oublié » déclenche l'action Keycloak
+ * UPDATE_PASSWORD via l'Admin REST : le compte de service a besoin des rôles
+ * realm-management « manage-users » et « view-users ». Sans eux, la page
+ * affiche quand même le message générique et n'envoie rien.
+ */
+
+/**
+ * ── Keycloak : ANNUAIRE DES COMPTES (page /equipes) ─────────────────────────
+ *
+ * La carte « Membres de la structure » de /equipes est alimentée par les
+ * COMPTES du realm Keycloak, lus via l'Admin REST API — plus par la table
+ * « team » de n8n. Voir include/keycloak_directory.php et l'action
+ * « team.list » de data/portail_api.php. La page est en LECTURE SEULE :
+ * l'action « team.update » a été retirée, toute modification se fait dans la
+ * console Keycloak.
+ *
+ * Aucune variable dédiée : l'Admin REST est appelée avec le client OIDC du
+ * portail, déjà configuré pour la connexion —
+ *     KEYCLOAK_CLIENT_ID  /  KEYCLOAK_CLIENT_SECRET
+ * en grant client_credentials.
+ *
+ * Réglages optionnels :
+ *   KEYCLOAK_USERS_MAX            nombre maximum de comptes remontés.
+ *                                 Défaut : 500 (plafond dur : 2000). Au-delà,
+ *                                 la page affiche « Liste tronquée ».
+ *   KEYCLOAK_DIR_DEBUG=1          journalise chaque appel Admin REST réussi
+ *                                 (chemin + nombre d'éléments). Utile pour
+ *                                 diagnostiquer un 403 ; à laisser à 0 sinon.
+ *
+ * ⚠️ À faire une fois côté Keycloak, sur le client KEYCLOAK_CLIENT_ID :
+ *        - « Client authentication » = ON ;
+ *        - « Service accounts roles » = ON (active le client_credentials) ;
+ *        - dans les rôles du client « realm-management », affecter au compte
+ *          de service :
+ *              · view-users   (lister et lire les comptes du realm)
+ *    Sans ce rôle, l'API Keycloak répond 403 et la page affiche le message
+ *    correspondant au lieu de la liste.
+ */
 ?>
