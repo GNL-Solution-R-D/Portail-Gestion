@@ -71,49 +71,99 @@ if (!defined('KC_ESP_PAGE_SIZE')) {
 
 /* ======================== Configuration ESP-CLI ======================== */
 
+/**
+ * Lit une variable ESP-CLI en tolérant PLUSIEURS orthographes du préfixe.
+ *
+ * ⚠️ Pourquoi : les clés du Secret Kubernetes s'écrivent « KEYCLOAK_ESP-CLI_… »,
+ *    avec un tiret. Or un nom de variable d'environnement doit être un
+ *    identifiant C — [A-Za-z_][A-Za-z0-9_]* — et le tiret n'en fait pas
+ *    partie. Conséquence : avec « envFrom: secretRef », le kubelet IGNORE
+ *    silencieusement ces clés (événement « InvalidVariableNames » sur le pod)
+ *    et avec « env[].name » l'API server refuse carrément le manifeste. La
+ *    variable n'atteint donc JAMAIS PHP, alors que le Secret paraît correct
+ *    dans l'interface.
+ *
+ * On accepte donc, dans l'ordre : le nom avec tiret (cas où il arrive quand
+ * même — fichier .env local, Secret monté en volume), puis la variante en
+ * underscore, puis la variante sans séparateur. Ajoutez la clé en underscore
+ * dans le Secret et tout fonctionne sans retoucher ce fichier.
+ *
+ * @return array{0:string,1:string} [valeur, nom réellement trouvé]
+ */
+if (!function_exists('kcEspEnv')) {
+    function kcEspEnv(string $suffix, string $default = ''): array
+    {
+        foreach (kcEspEnvNames($suffix) as $name) {
+            $v = config($name, null);
+            if ($v !== null && trim((string) $v) !== '') {
+                return [trim((string) $v), $name];
+            }
+        }
+        return [$default, ''];
+    }
+}
+
+/** Les noms acceptés pour un suffixe donné, dans l'ordre d'essai. */
+if (!function_exists('kcEspEnvNames')) {
+    function kcEspEnvNames(string $suffix): array
+    {
+        return [
+            'KEYCLOAK_ESP-CLI_' . $suffix,   // clé du Secret (tiret)
+            'KEYCLOAK_ESP_CLI_' . $suffix,   // variante injectable en env
+            'KEYCLOAK_ESPCLI_'  . $suffix,   // variante sans séparateur
+        ];
+    }
+}
+
 if (!function_exists('kcEspIssuer')) {
     function kcEspIssuer(): string
     {
-        $issuer = trim((string) config('KEYCLOAK_ESP-CLI_ISSUER', 'https://auth.gnl-solution.fr/auth/realms/client-auth'));
-        return rtrim($issuer, '/');
+        [$v] = kcEspEnv('ISSUER', 'https://auth.gnl-solution.fr/auth/realms/client-auth');
+        return rtrim($v, '/');
     }
 }
 if (!function_exists('kcEspClientId')) {
     function kcEspClientId(): string
     {
-        return trim((string) config('KEYCLOAK_ESP-CLI_CLIENT_ID', ''));
+        [$v] = kcEspEnv('CLIENT_ID');
+        return $v;
     }
 }
 if (!function_exists('kcEspClientSecret')) {
     function kcEspClientSecret(): string
     {
-        return trim((string) config('KEYCLOAK_ESP-CLI_CLIENT_SECRET', ''));
+        [$v] = kcEspEnv('CLIENT_SECRET');
+        return $v;
     }
 }
 if (!function_exists('kcEspRedirectUri')) {
     /** Non utilisée par la lecture (client_credentials) : exposée pour un futur flow « code ». */
     function kcEspRedirectUri(): string
     {
-        return trim((string) config('KEYCLOAK_ESP-CLI_REDIRECT_URI', ''));
+        [$v] = kcEspEnv('REDIRECT_URI');
+        return $v;
     }
 }
 if (!function_exists('kcEspPostLogoutRedirectUri')) {
     /** Idem : réservée à un futur flow « code ». */
     function kcEspPostLogoutRedirectUri(): string
     {
-        return trim((string) config('KEYCLOAK_ESP-CLI_POST_LOGOUT_REDIRECT_URI', ''));
+        [$v] = kcEspEnv('POST_LOGOUT_REDIRECT_URI');
+        return $v;
     }
 }
 if (!function_exists('kcEspDebug')) {
     function kcEspDebug(): bool
     {
-        return (string) config('KEYCLOAK_ESP-CLI_DEBUG_CLAIMS', '0') === '1';
+        [$v] = kcEspEnv('DEBUG_CLAIMS', '0');
+        return $v === '1';
     }
 }
 if (!function_exists('kcEspOrgsMax')) {
     function kcEspOrgsMax(): int
     {
-        $max = (int) config('KEYCLOAK_ESP-CLI_ORGS_MAX', 500);
+        [$v] = kcEspEnv('ORGS_MAX', '500');
+        $max = (int) $v;
         if ($max <= 0) $max = 500;
         return min($max, KC_ESP_HARD_LIMIT);
     }
@@ -121,9 +171,37 @@ if (!function_exists('kcEspOrgsMax')) {
 if (!function_exists('kcEspMembersMax')) {
     function kcEspMembersMax(): int
     {
-        $max = (int) config('KEYCLOAK_ESP-CLI_MEMBERS_MAX', 200);
+        [$v] = kcEspEnv('MEMBERS_MAX', '200');
+        $max = (int) $v;
         if ($max <= 0) $max = 200;
         return min($max, KC_ESP_HARD_LIMIT);
+    }
+}
+
+/**
+ * Diagnostic de configuration : '' si tout est lisible, sinon un message qui
+ * NOMME les variables cherchées. Sans lui, une variable absente et un secret
+ * erroné produisent exactement la même erreur, et on cherche du mauvais côté.
+ */
+if (!function_exists('kcEspConfigProblem')) {
+    function kcEspConfigProblem(): string
+    {
+        $missing = [];
+        foreach (['CLIENT_ID', 'CLIENT_SECRET'] as $suffix) {
+            [$value] = kcEspEnv($suffix);
+            if ($value === '') {
+                $missing[] = implode(' ou ', kcEspEnvNames($suffix));
+            }
+        }
+        if ($missing === []) {
+            return '';
+        }
+        return "Configuration absente de l'environnement du portail : "
+            . implode(' ; ', $missing)
+            . ". Rappel : un nom de variable d'environnement ne peut pas contenir de tiret — "
+            . "Kubernetes ignore les clés « KEYCLOAK_ESP-CLI_… » lors d'un « envFrom: secretRef ». "
+            . "Ajoutez les mêmes valeurs sous « KEYCLOAK_ESP_CLI_CLIENT_ID » et "
+            . "« KEYCLOAK_ESP_CLI_CLIENT_SECRET » dans le Secret, puis redémarrez le pod.";
     }
 }
 
@@ -153,12 +231,14 @@ if (!function_exists('kcEspAdminToken')) {
         static $tok = null, $exp = 0;
         if ($tok !== null && time() < $exp - 15) return $tok;
 
-        $clientId     = kcEspClientId();
-        $clientSecret = kcEspClientSecret();
-        if ($clientId === '' || $clientSecret === '') {
-            error_log('[GNL KC-ESP] KEYCLOAK_ESP-CLI_CLIENT_ID / KEYCLOAK_ESP-CLI_CLIENT_SECRET manquant.');
+        $problem = kcEspConfigProblem();
+        if ($problem !== '') {
+            error_log('[GNL KC-ESP] ' . $problem);
             return null;
         }
+
+        $clientId     = kcEspClientId();
+        $clientSecret = kcEspClientSecret();
 
         try {
             $resp = keycloakHttpRequest(
@@ -200,12 +280,20 @@ if (!function_exists('kcEspAdminToken')) {
 if (!function_exists('kcEspAdminGet')) {
     function kcEspAdminGet(string $path, array $query = []): array
     {
+        // Configuration absente : on le dit AVANT de parler d'un refus Keycloak.
+        $problem = kcEspConfigProblem();
+        if ($problem !== '') {
+            return ['status' => 0, 'body' => [], 'error' => $problem];
+        }
+
         $bearer = kcEspAdminToken();
         if ($bearer === null) {
             return [
                 'status' => 0,
                 'body'   => [],
-                'error'  => "Keycloak n'a pas délivré de jeton de service pour l'espace client : serveur injoignable, KEYCLOAK_ESP-CLI_CLIENT_ID / KEYCLOAK_ESP-CLI_CLIENT_SECRET invalides, ou « Service accounts roles » désactivé sur le client (le détail est dans les logs du portail).",
+                'error'  => "Keycloak a refusé le jeton de service du client « " . kcEspClientId() . " » sur "
+                    . kcEspIssuer() . " : secret erroné, « Service accounts roles » désactivé sur ce client, "
+                    . "ou serveur injoignable (le détail HTTP est dans les logs du portail).",
             ];
         }
 
