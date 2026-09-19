@@ -56,6 +56,12 @@
  *                                 lus via l'Admin REST. Voir include/keycloak_directory.php.
  *                                 LECTURE SEULE (pas d'action team.update).
  *     team.ensure           POST  CSRF                → { ok, message, row? }   (provisionne la ligne « team » du client courant)
+ *   ENTREPRISES (organisations Keycloak de l'ESPACE CLIENT)
+ *     org.list              GET   ?search=            → { ok, count, orgs:[...], truncated, source, issuer }
+ *     org.members           GET   ?org_id=            → { ok, count, members:[...], truncated }
+ *                                 Realm SEPARE, lu avec les variables
+ *                                 KEYCLOAK_ESP-CLI_* — voir
+ *                                 include/keycloak_esp_client.php. LECTURE SEULE.
  *   DÉPLOIEMENTS (renommage « Mes services »)
  *     deployment.list       GET                       → { ok, deployments:[...] }
  *     deployment.rename     POST  CSRF                → { ok, row }
@@ -2465,6 +2471,64 @@ try {
         }
 
         // ─────────────────────────────────────────────────────────────────────
+        // ─────────────────────────────────────────────────────────────────────
+        //  ENTREPRISES — organisations Keycloak de l'ESPACE CLIENT
+        // ─────────────────────────────────────────────────────────────────────
+        // Realm DIFFÉRENT de celui qui authentifie le portail gestion : on
+        // passe par le client ESP-CLI (KEYCLOAK_ESP-CLI_*) en grant
+        // client_credentials. Lecture seule, aucune écriture proposée.
+        //
+        // NB : HTTP 200 + ok:false (et non 502) en cas d'échec — le middleware
+        // Traefik « custom-errors » remplace le corps de toute réponse 5xx et
+        // effacerait le message d'erreur, qui est ici le seul diagnostic.
+        case 'org.list': {
+            require_once __DIR__ . '/../include/keycloak_esp_client.php';
+
+            $search  = trim((string)($_GET['search'] ?? ''));
+            $fetched = kcEspOrganizations($search);
+            if (!$fetched['ok']) {
+                send_json(200, [
+                    'ok'    => false,
+                    'code'  => 502,
+                    'error' => $fetched['error'] !== '' ? $fetched['error'] : 'Organisations Keycloak indisponibles.',
+                ]);
+            }
+
+            send_json(200, [
+                'ok'        => true,
+                'count'     => count($fetched['orgs']),
+                'orgs'      => $fetched['orgs'],
+                'truncated' => (bool)$fetched['truncated'],
+                'source'    => 'keycloak',
+                'issuer'    => kcEspIssuer(),
+            ]);
+        }
+
+        case 'org.members': {
+            require_once __DIR__ . '/../include/keycloak_esp_client.php';
+
+            $orgId = trim((string)($_GET['org_id'] ?? ''));
+            if ($orgId === '') {
+                send_json(400, ['ok' => false, 'error' => 'Organisation non identifiée.']);
+            }
+
+            $fetched = kcEspOrganizationMembers($orgId);
+            if (!$fetched['ok']) {
+                send_json(200, [
+                    'ok'    => false,
+                    'code'  => 502,
+                    'error' => $fetched['error'] !== '' ? $fetched['error'] : 'Membres Keycloak indisponibles.',
+                ]);
+            }
+
+            send_json(200, [
+                'ok'        => true,
+                'count'     => count($fetched['members']),
+                'members'   => $fetched['members'],
+                'truncated' => (bool)$fetched['truncated'],
+            ]);
+        }
+
         default:
             send_json(400, ['ok' => false, 'error' => 'Action inconnue : ' . $action]);
     }

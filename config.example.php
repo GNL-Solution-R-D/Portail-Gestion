@@ -176,4 +176,58 @@ try {
  *    Sans ce rôle, l'API Keycloak répond 403 et la page affiche le message
  *    correspondant au lieu de la liste.
  */
+
+/**
+ * ── Keycloak ESPACE CLIENT : ENTREPRISES (page /entreprises) ─────────────
+ *
+ * La page /entreprises liste les ORGANISATIONS du realm de l'ESPACE CLIENT,
+ * lues via l'Admin REST API de Keycloak (auth.gnl-solution.fr). Voir
+ * include/keycloak_esp_client.php et les actions « org.list » / « org.members »
+ * de data/portail_api.php. LECTURE SEULE.
+ *
+ * ⚠️ Ce n'est PAS le realm qui authentifie le portail gestion. Les variables
+ *    ci-dessous sont un jeu SÉPARÉ de KEYCLOAK_ISSUER / KEYCLOAK_CLIENT_ID :
+ *    ne les mélangez pas, sous peine de lister les organisations du mauvais
+ *    realm — ou de casser la connexion au portail.
+ *
+ *   KEYCLOAK_ESP-CLI_ISSUER        realm interrogé.
+ *                                  Défaut : https://auth.gnl-solution.fr/auth/realms/client-auth
+ *   KEYCLOAK_ESP-CLI_CLIENT_ID     client confidentiel de ce realm.
+ *   KEYCLOAK_ESP-CLI_CLIENT_SECRET son secret. OBLIGATOIRE : sans lui, la page
+ *                                  affiche proprement l'erreur au lieu d'une
+ *                                  liste vide.
+ *   KEYCLOAK_ESP-CLI_DEBUG_CLAIMS=1  journalise chaque appel Admin REST réussi
+ *                                  (chemin + nombre d'éléments). Utile pour
+ *                                  diagnostiquer un 403/404 ; à laisser à 0 sinon.
+ *
+ *   KEYCLOAK_ESP-CLI_REDIRECT_URI             ← NON UTILISÉES par /entreprises.
+ *   KEYCLOAK_ESP-CLI_POST_LOGOUT_REDIRECT_URI    La lecture se fait en grant
+ *                                  client_credentials, sans navigateur ni
+ *                                  redirection. Elles ne sont déclarées que pour
+ *                                  réserver les noms si une connexion OIDC vers
+ *                                  ce second realm est ajoutée un jour. Ne les
+ *                                  branchez pas dans un flux de lecture.
+ *
+ * Réglages optionnels :
+ *   KEYCLOAK_ESP-CLI_ORGS_MAX      organisations remontées. Défaut : 500
+ *                                  (plafond dur : 2000). Au-delà, la page
+ *                                  affiche « Liste tronquée ».
+ *   KEYCLOAK_ESP-CLI_MEMBERS_MAX   membres par organisation, chargés au
+ *                                  dépliage d'une ligne. Défaut : 200.
+ *
+ * ⚠️ À faire une fois côté Keycloak, sur le client KEYCLOAK_ESP-CLI_CLIENT_ID
+ *    DANS LE REALM DE L'ESPACE CLIENT :
+ *        - « Client authentication »  = ON ;
+ *        - « Service accounts roles » = ON (active le client_credentials) ;
+ *        - dans les rôles du client « realm-management », affecter au compte
+ *          de service :
+ *              · view-organizations  (lister les organisations et leurs membres)
+ *              · view-users          (lire les comptes membres)
+ *    Sans ces rôles, l'API répond 403 et la page affiche le message
+ *    correspondant au lieu de la liste.
+ *
+ * ⚠️ La fonctionnalité « Organizations » doit être activée sur ce realm
+ *    (Keycloak >= 26). Sinon l'endpoint /organizations répond 404, et le
+ *    message de la page le dit explicitement.
+ */
 ?>
