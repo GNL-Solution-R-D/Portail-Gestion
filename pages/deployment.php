@@ -318,6 +318,7 @@ $pageTitle = $deploymentName;
     #htaccessEditor:focus{box-shadow:0 0 0 2px rgba(99,102,241,.4);}
     #htaccessEditor:read-only{opacity:.6;cursor:default;}
   </style>
+  <?php require_once '../include/org_filter.php'; // filtre ?org=<uuid> posé par /entreprises ?>
 </head>
 <body class="bg-background text-foreground">
   <?php include('../include/header.php'); ?>

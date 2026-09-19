@@ -28,6 +28,14 @@
  *   Lectures  → GET  ?action=<module>.<sous-action>   (pas de CSRF)
  *   Écritures → POST ?action=<module>.<sous-action>   (header X-CSRF-Token)
  *
+ * ── Filtre par organisation ───────────────────────────────────────────────
+ *   Toute action des modules invoice / order / subscription / ticket /
+ *   deployment accepte ?org=<uuid> : l'UID Keycloak de l'organisation, posé
+ *   par les raccourcis de la page /entreprises. Quand il est présent et bien
+ *   formé, il part vers n8n sous la clé « organization_uid », EN PLUS de
+ *   client_id. Absent ou mal formé : la requête n8n ne porte aucune clé
+ *   organization_uid — payload identique à celui d'avant le filtre.
+ *
  * ── Carte des actions ─────────────────────────────────────────────────────────
  *   DOMAINES
  *     domain.list           GET   → { ok, domains:[...] }
@@ -196,8 +204,60 @@ function require_post(): void
  *
  * @return array{status:int, json:mixed, raw:string}
  */
+/**
+ * Modules dont les requêtes n8n acceptent un filtre par organisation.
+ * Le préfixe est comparé à la partie avant le point de l'action.
+ */
+const ORG_FILTERABLE_MODULES = ['invoice', 'order', 'subscription', 'ticket', 'deployment'];
+
+/**
+ * UID Keycloak de l'organisation sur laquelle filtrer, ou '' si aucun filtre.
+ *
+ * Arrive par ?org= depuis les raccourcis de la page /entreprises
+ * (ex. couturemania = 3df7b7a6-329d-4375-b3b1-a4619de4f5eb). On exige la forme
+ * d'un UUID : c'est ce que Keycloak produit, et cela évite d'expédier une
+ * chaîne arbitraire venue de l'URL jusque dans un workflow n8n.
+ *
+ * Renvoie '' quand le paramètre est absent OU mal formé : dans les deux cas
+ * la requête part SANS organization_uid, comme avant l'ajout du filtre.
+ */
+function gnl_org_filter(): string
+{
+    static $uid = null;
+    if ($uid !== null) {
+        return $uid;
+    }
+
+    $raw = trim((string)($_REQUEST['org'] ?? $_REQUEST['organization_uid'] ?? ''));
+    $uid = preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $raw)
+        ? strtolower($raw)
+        : '';
+
+    return $uid;
+}
+
+/** L'action appartient-elle à un module filtrable par organisation ? */
+function gnl_org_filterable(string $action): bool
+{
+    $module = strstr($action, '.', true);
+    return $module !== false && in_array($module, ORG_FILTERABLE_MODULES, true);
+}
+
 function n8n_call(array $payload): array
 {
+    // Filtre par organisation (page /entreprises) : ajouté ICI, une seule fois,
+    // plutôt que dans chacune des vingt constructions de payload du switch.
+    //
+    // Règle : pas de filtre → AUCUNE clé organization_uid dans la requête, pour
+    // que les workflows n8n existants voient exactement le payload d'avant.
+    // client_id reste toujours présent : c'est n8n qui arbitre entre les deux.
+    $action = (string)($payload['action'] ?? '');
+    $orgUid = gnl_org_filter();
+    if ($orgUid !== '' && $action !== '' && gnl_org_filterable($action)
+        && !array_key_exists('organization_uid', $payload)) {
+        $payload['organization_uid'] = $orgUid;
+    }
+
     // Transport centralisé dans include/portail_api_client.php afin d'être
     // réutilisable hors de ce proxy (ex. keycloak_callback.php → team.ensure).
     // Forme de retour identique : { status, json, raw }.

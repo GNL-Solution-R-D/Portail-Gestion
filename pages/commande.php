@@ -70,6 +70,7 @@ $searchPlaceholder = t('Rechercher une commande…');
       .dashboard-main{padding:1rem;}
     }
   </style>
+  <?php require_once '../include/org_filter.php'; // filtre ?org=<uuid> posé par /entreprises ?>
 </head>
 <body class="bg-background text-foreground">
   <?php include('../include/header.php'); ?>

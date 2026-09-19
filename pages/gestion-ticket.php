@@ -146,6 +146,7 @@ $searchPlaceholder = 'Rechercher (objet, client, référence…)';
     .form-msg.ok{color:#047857;}
     .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
   </style>
+  <?php require_once '../include/org_filter.php'; // filtre ?org=<uuid> posé par /entreprises ?>
 </head>
 <body class="bg-background text-foreground">
   <?php include('../include/header.php'); ?>

@@ -102,6 +102,11 @@ $searchPlaceholder = t('Rechercher une entreprise…');
     .member-main span{display:block;font-size:.8125rem;color:var(--muted-foreground, #64748b);}
     .member-meta{font-size:.8125rem;color:var(--muted-foreground, #64748b);text-align:right;flex:none;}
 
+    .org-links{display:flex;align-items:center;gap:.35rem;}
+    .org-link{display:grid;place-items:center;width:2rem;height:2rem;border-radius:.5rem;border:1px solid rgba(148,163,184,.35);color:inherit;opacity:.7;transition:opacity 120ms ease, background-color 120ms ease;}
+    .org-link:hover{opacity:1;background:color-mix(in srgb, currentColor 8%, transparent);}
+    @media (prefers-reduced-motion: reduce){ .org-link{transition:none;} }
+
     @media (max-width: 1024px) {
       .dashboard-layout { flex-direction: column; }
       .dashboard-sidebar {width:100%;max-width:none;flex:0 0 auto;height:auto !important;}
@@ -151,11 +156,12 @@ $searchPlaceholder = t('Rechercher une entreprise…');
                   <th class="border-surface border-b p-4"><p class="text-default block text-sm font-medium"><?= t('Localisation') ?></p></th>
                   <th class="border-surface border-b p-4"><p class="text-default block text-sm font-medium"><?= t('Domaines') ?></p></th>
                   <th class="border-surface border-b p-4"><p class="text-default block text-sm font-medium"><?= t('Statut') ?></p></th>
+                  <th class="border-surface border-b p-4"><p class="text-default block text-sm font-medium"><?= t('Raccourcis') ?></p></th>
                 </tr>
               </thead>
               <tbody id="orgsTableBody">
                 <tr class="orgs-state">
-                  <td colspan="5"><?= t('Chargement des entreprises…') ?></td>
+                  <td colspan="6"><?= t('Chargement des entreprises…') ?></td>
                 </tr>
               </tbody>
             </table>
@@ -185,7 +191,10 @@ $searchPlaceholder = t('Rechercher une entreprise…');
       membersNone: <?= json_encode(t('Aucun membre rattaché à cette entreprise.'), JSON_UNESCAPED_UNICODE) ?>,
       membersErr:  <?= json_encode(t('Impossible de charger les membres.'), JSON_UNESCAPED_UNICODE) ?>,
       membersMore: <?= json_encode(t('Liste tronquée : seuls les premiers membres sont affichés.'), JSON_UNESCAPED_UNICODE) ?>,
-      noFunction:  <?= json_encode(t('Aucune fonction définie'), JSON_UNESCAPED_UNICODE) ?>
+      noFunction:  <?= json_encode(t('Aucune fonction définie'), JSON_UNESCAPED_UNICODE) ?>,
+      goInvoices:  <?= json_encode(t('Factures de cette entreprise'), JSON_UNESCAPED_UNICODE) ?>,
+      goOrders:    <?= json_encode(t('Commandes de cette entreprise'), JSON_UNESCAPED_UNICODE) ?>,
+      goSubs:      <?= json_encode(t('Abonnements de cette entreprise'), JSON_UNESCAPED_UNICODE) ?>
     };
   </script>
   <script>
@@ -200,7 +209,7 @@ $searchPlaceholder = t('Rechercher une entreprise…');
 
     var BADGE_OK  = 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300';
     var BADGE_OFF = 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300';
-    var COLS = 5;
+    var COLS = 6;
 
     ready(function () {
       var input    = document.getElementById('orgsSearchInput');
@@ -236,6 +245,20 @@ $searchPlaceholder = t('Rechercher une entreprise…');
 
       function chevron(){
         return '<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+      }
+
+      // Raccourcis de fin de ligne : mêmes pages que le menu, mais filtrées
+      // sur l'UID Keycloak de l'organisation (?org=). C'est data/portail_api.php
+      // qui relaie cet UID à n8n sous la clé « organization_uid ».
+      var ICONS = {
+        invoice: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>',
+        order:   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+        sub:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>'
+      };
+
+      function shortcut(page, orgId, icon, title){
+        return '<a class="org-link" href="./' + page + '?org=' + encodeURIComponent(orgId) + '"' +
+               ' title="' + esc(title) + '" aria-label="' + esc(title) + '">' + icon + '</a>';
       }
 
       function rowHtml(o){
@@ -274,6 +297,11 @@ $searchPlaceholder = t('Rechercher une entreprise…');
           '</div></td>' +
           '<td class="border-surface border-b p-4 align-top"><p class="text-foreground block text-sm">' + esc(domains) + '</p></td>' +
           '<td class="border-surface border-b p-4 align-top"><span class="inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium whitespace-nowrap shrink-0 ' + statusClass + '">' + esc(statusLabel) + '</span></td>' +
+          '<td class="border-surface border-b p-4 align-top"><div class="org-links">' +
+            shortcut('facture',     o.id, ICONS.invoice, I18N.goInvoices || 'Factures') +
+            shortcut('commande',    o.id, ICONS.order,   I18N.goOrders   || 'Commandes') +
+            shortcut('abonnements', o.id, ICONS.sub,     I18N.goSubs     || 'Abonnements') +
+          '</div></td>' +
         '</tr>' +
         '<tr class="org-members" data-org-members="' + esc(o.id) + '" hidden>' +
           '<td colspan="' + COLS + '"><div class="org-members-inner"></div></td>' +
