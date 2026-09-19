@@ -35,7 +35,7 @@ $searchPlaceholder = t('Rechercher une facture…');
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title><?= t('Mes factures - GNL Solution') ?></title>
+  <title><?= t('Facturation Client - GNL Solution') ?></title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <link rel="preload" href="../assets/front/4cf2300e9c8272f7-s.p.woff2" as="font" crossorigin="" type="font/woff2"/>
   <link rel="preload" href="../assets/front/81f255edf7f746ee-s.p.woff2" as="font" crossorigin="" type="font/woff2"/>
@@ -88,7 +88,7 @@ $searchPlaceholder = t('Rechercher une facture…');
         <div data-slot="card" class="bg-background text-card-foreground flex flex-col gap-4 rounded-xl border py-5 shadow-sm">
           <div class="px-6 flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <h1 class="text-xl font-bold"><?= t('Mes factures') ?></h1>
+              <h1 class="text-xl font-bold"><?= t('Facturation Client') ?></h1>
               <p class="text-sm text-muted-foreground mt-1"><?= t('Suivi de vos factures et téléchargement des PDF.') ?></p>
             </div>
             <span id="invoicesCount" class="text-sm text-muted-foreground"
