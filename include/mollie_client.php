@@ -12,6 +12,7 @@ declare(strict_types=1);
  *   - la console voit les abonnements de TOUS les clients :
  *       mollieListAllSubscriptions()  → GET /v2/subscriptions
  *       mollieListAllCustomers()      → GET /v2/customers (noms / e-mails)
+ *       mollieListAllPayments()       → GET /v2/payments (page /commande)
  *     Le rattachement cst_… ↔ entreprise se fait via l'attribut
  *     d'ORGANISATION Keycloak « moliecliid » du realm de l'espace client
  *     (include/keycloak_esp_client.php) ;
@@ -584,5 +585,19 @@ if (!function_exists('mollieListAllCustomers')) {
     {
         $r = mollieListPaged('/customers', 'customers', $max);
         return ['ok' => $r['ok'], 'customers' => $r['items'], 'truncated' => $r['truncated'], 'error' => $r['error'], 'status' => $r['status']];
+    }
+}
+
+if (!function_exists('mollieListAllPayments')) {
+    /**
+     * Paiements de TOUS les clients du profil (GET /v2/payments), du plus
+     * récent au plus ancien, plafonnés à $max. Un paiement lié à un client
+     * porte « customerId ».
+     * @return array{ok:bool, payments:array, truncated:bool, error:string, status:int}
+     */
+    function mollieListAllPayments(int $max = 1000): array
+    {
+        $r = mollieListPaged('/payments', 'payments', $max);
+        return ['ok' => $r['ok'], 'payments' => $r['items'], 'truncated' => $r['truncated'], 'error' => $r['error'], 'status' => $r['status']];
     }
 }

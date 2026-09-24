@@ -64,8 +64,11 @@
  *     invoice.list          GET                       → { ok, count, invoices:[...] }
  *     invoice.detail        GET   ?id= | ?ref=        → { ok, count, invoices:[...] }
  *   COMMANDES
- *     order.list            GET                       → { ok, count, orders:[...] }
- *     order.detail          GET   ?id= | ?ref=        → { ok, count, orders:[...] }
+ *     — API Mollie en direct (plus n8n), TOUS les clients, require_support —
+ *     order.list            GET   [?org=]             → { ok, count, orders:[...], clients:[...], truncated, warnings }
+ *                                 une commande = un paiement Mollie (GET /v2/payments,
+ *                                 1000 plus récents), client rattaché comme pour les abonnements.
+ *     order.detail          GET   ?ref=tr_…           → { ok, source:'mollie', products:[...], payment:{...} }
  *   ÉQUIPES
  *     team.list             GET                       → { ok, count, members:[...], structure, source, truncated, can_edit:false }
  *                                 Source de vérité : les comptes du realm Keycloak,
@@ -714,6 +717,133 @@ function normalize_mollie_subscription(array $row, array $client = []): array
 }
 
 /**
+ * Paiement Mollie → « commande » (même forme que pages/commande.php du portail
+ * client), plus l'identité du CLIENT pour la console support.
+ * $subsById : abonnements (id → abonnement brut) pour libeller la fréquence et
+ * le prochain renouvellement des paiements récurrents.
+ */
+function normalize_mollie_payment(array $p, array $subsById = [], array $client = []): array
+{
+    $id     = (string)($p['id'] ?? '');
+    $status = strtolower((string)($p['status'] ?? ''));
+    $amount = is_array($p['amount'] ?? null) ? $p['amount'] : [];
+    $value  = is_numeric($amount['value'] ?? null) ? (float)$amount['value'] : null;
+    $cur    = strtoupper((string)($amount['currency'] ?? 'EUR'));
+
+    $fmt = static function (?float $v) use ($cur): string {
+        if ($v === null) {
+            return '—';
+        }
+        return number_format($v, 2, ',', ' ') . ' ' . ($cur === 'EUR' ? '€' : $cur);
+    };
+
+    // Remboursements / rejets : priment sur le statut « paid ».
+    $refunded = is_numeric($p['amountRefunded']['value'] ?? null) ? (float)$p['amountRefunded']['value'] : 0.0;
+    $charged  = is_numeric($p['amountChargedBack']['value'] ?? null) ? (float)$p['amountChargedBack']['value'] : 0.0;
+    $statusLabel = order_status_label($status);
+    $statusClass = order_status_class($status);
+    if ($charged > 0) {
+        $statusLabel = 'Rejetée';
+        $statusClass = order_status_class('chargeback');
+    } elseif ($refunded > 0 && $value !== null) {
+        $statusLabel = $refunded + 0.005 >= $value ? 'Remboursée' : 'Partiellement remboursée';
+        $statusClass = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200';
+    }
+
+    // Fréquence : abonnement lié, sinon type de paiement.
+    $subId    = (string)($p['subscriptionId'] ?? '');
+    $sub      = $subId !== '' ? ($subsById[$subId] ?? null) : null;
+    $sequence = strtolower((string)($p['sequenceType'] ?? 'oneoff'));
+    $months   = null;
+    $next     = '—';
+    if (is_array($sub)) {
+        $frequency = mollieIntervalLabel((string)($sub['interval'] ?? ''));
+        $months    = mollieIntervalMonths((string)($sub['interval'] ?? ''));
+        if (in_array(strtolower((string)($sub['status'] ?? '')), ['active', 'pending'], true)) {
+            $next = date_display(to_timestamp($sub['nextPaymentDate'] ?? null));
+        }
+    } elseif ($subId !== '' || $sequence === 'recurring') {
+        $frequency = 'Récurrent';
+    } elseif ($sequence === 'first') {
+        $frequency = 'Premier paiement';
+    } else {
+        $frequency = 'Paiement unique';
+    }
+
+    $createdTs = to_timestamp($p['createdAt'] ?? null);
+    $desc      = trim((string)($p['description'] ?? ''));
+
+    return [
+        'id'              => $id,
+        'ref'             => $id,
+        'description'     => $desc !== '' ? $desc : '—',
+        'date'            => date_display($createdTs),
+        'date_ts'         => $createdTs,
+        'status'          => $status,
+        'status_label'    => $statusLabel,
+        'status_class'    => $statusClass,
+        'amount'          => $fmt($value),
+        'amount_raw'      => $value,
+        'currency'        => $cur,
+        'frequency_label' => $frequency,
+        'interval_months' => $months,
+        'next_renewal'    => $next,
+        'subscription_id' => $subId,
+        'method_label'    => molliePaymentMethodLabel($p),
+        'paid_at'         => date_display(to_timestamp($p['paidAt'] ?? null)),
+        'refunded'        => $refunded > 0 ? $fmt($refunded) : '',
+        'charged_back'    => $charged > 0 ? $fmt($charged) : '',
+        'source'          => 'mollie',
+        'customer_id'     => (string)($p['customerId'] ?? ''),
+        'client_key'      => (string)($client['key'] ?? ($p['customerId'] ?? '')),
+        'client_name'     => (string)($client['name'] ?? ($p['customerId'] ?? '—')),
+        'client_org_id'   => (string)($client['org_id'] ?? ''),
+        'client_linked'   => (bool)($client['linked'] ?? false),
+    ];
+}
+
+/** Paiement « vérification de moyen de paiement » créé par le portail client (0,00 €). */
+function mollie_is_portal_mandate_payment(array $p): bool
+{
+    return (string)($p['metadata']['portail'] ?? '') === 'mandate_update'
+        || (strtolower((string)($p['sequenceType'] ?? '')) === 'first'
+            && is_numeric($p['amount']['value'] ?? null) && (float)$p['amount']['value'] == 0.0);
+}
+
+/** Lignes du paiement Mollie (champ « lines ») au format du panneau de détail. */
+function mollie_payment_lines(array $p, string $fallbackLabel): array
+{
+    $cur = strtoupper((string)($p['amount']['currency'] ?? 'EUR'));
+    $fmt = static function ($v) use ($cur): string {
+        return is_numeric($v) ? number_format((float)$v, 2, ',', ' ') . ' ' . ($cur === 'EUR' ? '€' : $cur) : '—';
+    };
+    $out = [];
+    foreach ((array)($p['lines'] ?? []) as $l) {
+        if (!is_array($l)) {
+            continue;
+        }
+        $out[] = [
+            'label'      => (string)($l['description'] ?? $l['name'] ?? '—'),
+            'quantity'   => (string)($l['quantity'] ?? '1'),
+            'unit_price' => $fmt($l['unitPrice']['value'] ?? null),
+            'line_total' => $fmt($l['totalAmount']['value'] ?? null),
+            'options'    => [],
+        ];
+    }
+    if ($out === []) {
+        // Paiement créé sans lignes : une seule ligne = la description.
+        $out[] = [
+            'label'      => $fallbackLabel,
+            'quantity'   => '1',
+            'unit_price' => $fmt($p['amount']['value'] ?? null),
+            'line_total' => $fmt($p['amount']['value'] ?? null),
+            'options'    => [],
+        ];
+    }
+    return $out;
+}
+
+/**
  * Annuaire « client Mollie (cst_…) → entreprise » pour la console support.
  *
  *   1. organisations Keycloak de l'espace client dont l'attribut
@@ -784,7 +914,11 @@ function mollie_client_directory(bool $withMollieNames = true): array
 /** Identité client d'un cst_… (annuaire, sinon l'id seul). */
 function mollie_client_for(array $directory, string $cst): array
 {
-    return $directory['by_customer'][$cst] ?? ['key' => $cst, 'name' => $cst !== '' ? $cst : '—', 'org_id' => '', 'linked' => false];
+    if ($cst === '') {
+        // Paiement sans client Mollie (lien de paiement, paiement ponctuel…).
+        return ['key' => 'none', 'name' => 'Sans client Mollie', 'org_id' => '', 'linked' => false];
+    }
+    return $directory['by_customer'][$cst] ?? ['key' => $cst, 'name' => $cst, 'org_id' => '', 'linked' => false];
 }
 
 /** Tri de la page : actifs d'abord, puis prochaine échéance / date de début. */
@@ -932,6 +1066,12 @@ function order_status_label($status): string
         'processing' => 'En cours', 'shipped' => 'Expédiée',
         'delivered' => 'Livrée', 'closed' => 'Classée',
         'cancelled' => 'Annulée', 'canceled' => 'Annulée',
+        // États Mollie (nouveau format n8n).
+        'open' => 'En attente', 'pending' => 'En attente',
+        'authorized' => 'Autorisée', 'paid' => 'Payée',
+        'active' => 'Active', 'suspended' => 'Suspendue',
+        'completed' => 'Terminée', 'failed' => 'Échouée',
+        'expired' => 'Expirée', 'chargeback' => 'Rejetée',
     ];
     return $map[$n] ?? ($n !== '' ? ucfirst($n) : 'Inconnu');
 }
@@ -939,13 +1079,13 @@ function order_status_label($status): string
 function order_status_class($status): string
 {
     $n = strtolower(trim((string)$status));
-    if (in_array($n, ['3', 'delivered', 'closed', 'shipped'], true)) {
+    if (in_array($n, ['3', 'delivered', 'closed', 'shipped', 'paid', 'active', 'completed'], true)) {
         return 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300';
     }
-    if (in_array($n, ['-1', 'cancelled', 'canceled'], true)) {
+    if (in_array($n, ['-1', 'cancelled', 'canceled', 'failed', 'expired', 'chargeback'], true)) {
         return 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300';
     }
-    if (in_array($n, ['1', 'validated'], true)) {
+    if (in_array($n, ['1', 'validated', 'authorized'], true)) {
         return 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300';
     }
     return 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300';
@@ -2148,57 +2288,123 @@ try {
         // ─────────────────────────────────────────────────────────────────────
         //  COMMANDES
         // ─────────────────────────────────────────────────────────────────────
+        // Source : API Mollie en direct (plus n8n), comme le portail client —
+        // une commande = un PAIEMENT Mollie — mais pour TOUS les clients du
+        // profil. Réservé au support. Avec ?org=<uuid> (raccourci de
+        // /entreprises) : uniquement le client Mollie de cette organisation.
         case 'order.list': {
-            $resp = n8n_call(['action' => 'order.list', 'client_id' => $clientId]);
-            ensure_ok($resp);
+            require_support($user);
+            mollie_require_configured();
 
-            $rows   = extract_rows($resp['json'], ['orders', 'commandes'], ['id', 'ref', 'reference']);
-            $orders = array_map('normalize_order', $rows);
+            $orgUid   = gnl_org_filter();
+            $warnings = [];
+            $max      = 1000;
+
+            if ($orgUid !== '') {
+                require_once __DIR__ . '/../include/keycloak_esp_client.php';
+                $o = kcEspOrganizationById($orgUid);
+                if (!$o['ok'] || !is_array($o['org'])) {
+                    send_json(200, ['ok' => false, 'code' => 'KEYCLOAK', 'error' => $o['error'] !== '' ? $o['error'] : 'Organisation introuvable.']);
+                }
+                $cst = trim((string)(($o['org']['attributes'] ?? [])[MOLLIE_USER_ATTRIBUTE] ?? ''));
+                if ($cst === '' || !mollieIsCustomerId($cst)) {
+                    send_json(200, ['ok' => true, 'linked' => false, 'count' => 0, 'orders' => [], 'clients' => [], 'truncated' => false, 'warnings' => []]);
+                }
+                $dir = ['by_customer' => [$cst => [
+                    'key' => $cst, 'name' => (string)($o['org']['label'] !== '' ? $o['org']['label'] : $orgUid),
+                    'org_id' => (string)$o['org']['id'], 'linked' => true,
+                ]], 'warnings' => []];
+                $r = mollieListCustomerPayments($cst, $max);
+                $payments = $r['ok'] ? $r['payments'] : [];
+                $subs = mollieListCustomerSubscriptions($cst);
+            } else {
+                $r = mollieListAllPayments($max);
+                $payments = $r['ok'] ? $r['payments'] : [];
+                $subs = mollieListAllSubscriptions();
+                $dir = mollie_client_directory();
+                $warnings = $dir['warnings'];
+            }
+            if (!$r['ok']) {
+                send_json(200, ['ok' => false, 'error' => $r['error'], 'code' => 'MOLLIE']);
+            }
+
+            // Abonnements : fréquence et prochain renouvellement des paiements
+            // récurrents. Un échec ici n'empêche pas d'afficher les commandes.
+            $subsById = [];
+            if ($subs['ok']) {
+                foreach ($subs['subscriptions'] as $sub) {
+                    if (!empty($sub['id'])) {
+                        $subsById[(string)$sub['id']] = $sub;
+                    }
+                }
+            }
+
+            $orders  = [];
+            $clients = [];
+            foreach ($payments as $p) {
+                if (mollie_is_portal_mandate_payment($p)) {
+                    continue;
+                }
+                $o = normalize_mollie_payment($p, $subsById, mollie_client_for($dir, (string)($p['customerId'] ?? '')));
+                $orders[] = $o;
+                $k = $o['client_key'];
+                if (!isset($clients[$k])) {
+                    $clients[$k] = ['key' => $k, 'name' => $o['client_name'], 'org_id' => $o['client_org_id'], 'linked' => $o['client_linked'], 'count' => 0];
+                }
+                $clients[$k]['count']++;
+            }
+            $clients = array_values($clients);
+            usort($clients, static function (array $a, array $b): int {
+                return strcmp(mb_strtolower($a['name'], 'UTF-8'), mb_strtolower($b['name'], 'UTF-8')) ?: strcmp($a['key'], $b['key']);
+            });
 
             send_json(200, [
-                'ok'     => true,
-                'count'  => count($orders),
-                'orders' => $orders,
+                'ok'        => true,
+                'linked'    => true,
+                'count'     => count($orders),
+                'truncated' => $r['truncated'],
+                'max'       => $max,
+                'orders'    => $orders,
+                'clients'   => $clients,
+                'warnings'  => $warnings,
             ]);
         }
 
+        // Détail d'un paiement (lignes, moyen de paiement, remboursements).
+        // Pas de contrôle d'appartenance : la console support voit tout.
         case 'order.detail': {
-            $id  = trim((string)($_GET['id'] ?? ''));
-            $ref = trim((string)($_GET['ref'] ?? ''));
-            if ($id === '' && $ref === '') {
-                send_json(400, ['ok' => false, 'error' => 'Paramètre « id » ou « ref » requis.']);
+            require_support($user);
+            mollie_require_configured();
+            $ref = trim((string)($_GET['ref'] ?? ($_GET['id'] ?? '')));
+            if ($ref === '') {
+                send_json(400, ['ok' => false, 'error' => 'Paramètre « ref » requis.']);
             }
 
-            $resp = n8n_call([
-                'action'    => 'order.detail',
-                'client_id' => $clientId,
-                'id'        => $id,
-                'ref'       => $ref,
-            ]);
-            ensure_ok($resp);
-
-            $rows = extract_rows($resp['json'], ['orders', 'commandes'], ['id', 'ref', 'reference']);
-
-            if (($id !== '' || $ref !== '') && count($rows) > 1) {
-                $rows = array_values(array_filter($rows, static function ($r) use ($id, $ref): bool {
-                    if (!is_array($r)) {
-                        return false;
-                    }
-                    $rId  = (string)($r['id'] ?? $r['rowid'] ?? '');
-                    $rRef = (string)($r['ref'] ?? $r['reference'] ?? '');
-                    return ($id !== '' && $rId === $id) || ($ref !== '' && $rRef === $ref);
-                }));
+            $pay = mollieGetPayment($ref);
+            if (!$pay['ok']) {
+                if (in_array($pay['status'], [400, 404], true)) {
+                    send_json(404, ['ok' => false, 'error' => 'Commande introuvable.']);
+                }
+                send_json(200, ['ok' => false, 'error' => $pay['error'], 'code' => 'MOLLIE']);
             }
+            $p = $pay['payment'];
+            $o = normalize_mollie_payment($p);
 
-            if (empty($rows)) {
-                send_json(404, ['ok' => false, 'error' => 'Commande introuvable.']);
-            }
-
-            $orders = array_map('normalize_order', $rows);
             send_json(200, [
-                'ok'     => true,
-                'count'  => count($orders),
-                'orders' => $orders,
+                'ok'       => true,
+                'source'   => 'mollie',
+                'ref'      => $o['ref'],
+                'id'       => $o['id'],
+                'products' => mollie_payment_lines($p, $o['description']),
+                'extra_options' => [],
+                'totals'   => [],
+                'payment'  => [
+                    'method'       => $o['method_label'],
+                    'paid_at'      => $o['paid_at'],
+                    'refunded'     => $o['refunded'],
+                    'charged_back' => $o['charged_back'],
+                    'status_label' => $o['status_label'],
+                ],
             ]);
         }
 
