@@ -49,9 +49,17 @@
  *   DOCUMENTATION
  *     documentation.list    GET                       → { ok, articles:[...], count }
  *     documentation.search  GET   ?q=                 → { ok, articles:[...], count, query }
- *   ABONNEMENTS
- *     subscription.list     GET                       → { ok, count, subscriptions:[...] }
- *     subscription.detail   GET   ?id= | ?ref=        → { ok, count, subscriptions:[...] }
+ *   ABONNEMENTS — API Mollie en direct (plus n8n), TOUS les clients, require_support
+ *     subscription.list     GET   [?org=]             → { ok, count, subscriptions:[...], clients:[...],
+ *                                                       can_manage, interval_choices, truncated, warnings }
+ *                                 sans ?org : GET /v2/subscriptions (tout le profil Mollie),
+ *                                 client = organisation Keycloak dont l'attribut
+ *                                 « moliecliid » porte le cst_… (sinon nom Mollie).
+ *     subscription.detail   GET   ?id= &customer=     → { ok, count, subscriptions:[...] }
+ *     subscription.mandate  GET   ?id= &customer=     → { ok, label }
+ *     subscription.update_interval POST CSRF id, customer, interval → { ok, subscription }
+ *     subscription.cancel   POST  CSRF  id, customer  → { ok, subscription }   (définitif)
+ *                                 Voir include/mollie_client.php (MOLIE_API_KEY).
  *   FACTURES
  *     invoice.list          GET                       → { ok, count, invoices:[...] }
  *     invoice.detail        GET   ?id= | ?ref=        → { ok, count, invoices:[...] }
@@ -565,6 +573,7 @@ function subscription_status_label($status): string
         'open' => 'En cours', 'running' => 'En cours', 'active' => 'En cours',
         'closed' => 'Fermé', 'cancelled' => 'Résilié', 'canceled' => 'Résilié',
         'expired' => 'Expiré', 'suspended' => 'Suspendu',
+        'completed' => 'Terminé',
     ];
     return $map[$n] ?? ($n !== '' ? ucfirst($n) : 'Inconnu');
 }
@@ -627,6 +636,218 @@ function normalize_subscription(array $row): array
 // ══════════════════════════════════════════════════════════════════════════════
 //  Normalisation — FACTURES
 // ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Abonnement Mollie → même forme que la page /abonnements du portail client,
+ * plus l'identité du CLIENT (console support : tous les clients).
+ *
+ * Champs Mollie : id (sub_…), customerId (cst_…), status
+ * (pending|active|canceled|suspended|completed), amount {value, currency},
+ * interval ("1 month"), times, startDate / nextPaymentDate, description, mandateId.
+ *
+ * $client = ['key' => cst_…, 'name' => …, 'org_id' => uuid|'', 'linked' => bool]
+ */
+function normalize_mollie_subscription(array $row, array $client = []): array
+{
+    $id     = (string)($row['id'] ?? '');
+    $status = strtolower((string)($row['status'] ?? ''));
+
+    $startTs = to_timestamp($row['startDate'] ?? ($row['createdAt'] ?? null));
+    // Mollie ne renvoie nextPaymentDate que pour un abonnement actif.
+    $nextTs  = in_array($status, ['active', 'pending'], true)
+        ? to_timestamp($row['nextPaymentDate'] ?? null)
+        : null;
+
+    $amount   = is_array($row['amount'] ?? null) ? $row['amount'] : [];
+    $value    = $amount['value'] ?? null;
+    $currency = strtoupper((string)($amount['currency'] ?? 'EUR'));
+    $amountTxt = amount_display($value);
+    if ($currency !== 'EUR' && $amountTxt !== '—') {
+        $amountTxt = number_format((float)$value, 2, ',', ' ') . ' ' . $currency;
+    }
+
+    $frequency = mollieIntervalLabel((string)($row['interval'] ?? ''));
+    $times     = isset($row['times']) && is_numeric($row['times']) ? (int)$row['times'] : 0;
+    if ($times > 0) {
+        $frequency .= ' · ' . $times . ' échéance' . ($times > 1 ? 's' : '');
+    }
+
+    $label = trim((string)($row['description'] ?? ''));
+
+    // Capacités : celles du portail client, SANS le changement de carte (c'est
+    // au client de saisir son moyen de paiement, depuis son espace client).
+    $caps = mollieSubscriptionCapabilities($row);
+    $caps['can_change_payment'] = false;
+    $caps['interval_reason'] = str_replace(
+        [' : contactez le support.', 'Mettez d\'abord à jour le moyen de paiement.'],
+        [' : modification à faire directement dans Mollie.', 'Abonnement suspendu : le client doit d\'abord mettre à jour son moyen de paiement.'],
+        (string)$caps['interval_reason']
+    );
+
+    $customerId = (string)($row['customerId'] ?? ($client['key'] ?? ''));
+
+    return [
+        'id'            => $id,
+        'ref'           => $id,
+        'label'         => $label !== '' ? $label : '—',
+        'start'         => date_display($startTs),
+        'start_ts'      => $startTs,
+        'end'           => date_display($nextTs),
+        'end_ts'        => $nextTs,
+        'frequency'     => $frequency,
+        'amount'        => $amountTxt,
+        'amount_raw'    => is_numeric($value) ? (float)$value : null,
+        'currency'      => $currency,
+        'status'        => $status,
+        'status_label'  => subscription_status_label($status),
+        'status_class'  => subscription_status_class($status),
+        'source'        => 'mollie',
+        'interval'      => (string)($row['interval'] ?? ''),
+        'has_mandate'   => trim((string)($row['mandateId'] ?? '')) !== '',
+        'actions'       => $caps,
+        'customer_id'   => $customerId,
+        'client_key'    => $customerId,
+        'client_name'   => (string)($client['name'] ?? ($customerId !== '' ? $customerId : '—')),
+        'client_org_id' => (string)($client['org_id'] ?? ''),
+        'client_linked' => (bool)($client['linked'] ?? false),
+    ];
+}
+
+/**
+ * Annuaire « client Mollie (cst_…) → entreprise » pour la console support.
+ *
+ *   1. organisations Keycloak de l'espace client dont l'attribut
+ *      « moliecliid » porte un cst_… valide → nom de l'entreprise ;
+ *   2. à défaut, nom / e-mail du client côté Mollie (GET /v2/customers) ;
+ *   3. à défaut, l'identifiant cst_… lui-même.
+ *
+ * Best-effort : un échec Keycloak ou Mollie n'empêche pas la liste, il est
+ * remonté dans « warnings ».
+ *
+ * @return array{by_customer:array<string,array>, warnings:string[]}
+ */
+function mollie_client_directory(bool $withMollieNames = true): array
+{
+    require_once __DIR__ . '/../include/keycloak_esp_client.php';
+
+    $by = [];
+    $warnings = [];
+
+    $orgs = kcEspOrganizations('');
+    if ($orgs['ok']) {
+        foreach ($orgs['orgs'] as $org) {
+            $cst = trim((string)(($org['attributes'] ?? [])[MOLLIE_USER_ATTRIBUTE] ?? ''));
+            if ($cst === '' || !mollieIsCustomerId($cst)) {
+                continue;
+            }
+            if (isset($by[$cst])) {
+                error_log('[mollie] ' . $cst . ' est rattaché à plusieurs organisations (' . $by[$cst]['org_id'] . ', ' . $org['id'] . ').');
+                continue;
+            }
+            $by[$cst] = [
+                'key'    => $cst,
+                'name'   => (string)($org['label'] !== '' ? $org['label'] : $cst),
+                'org_id' => (string)$org['id'],
+                'linked' => true,
+            ];
+        }
+        if (!empty($orgs['truncated'])) {
+            $warnings[] = 'Liste des entreprises Keycloak tronquée : certains clients peuvent apparaître sans nom d\'entreprise.';
+        }
+    } else {
+        $warnings[] = 'Entreprises Keycloak indisponibles (' . $orgs['error'] . ') : les clients sont affichés avec leur nom Mollie.';
+    }
+
+    if ($withMollieNames) {
+        $customers = mollieListAllCustomers();
+        if ($customers['ok']) {
+            foreach ($customers['customers'] as $c) {
+                $cst = (string)($c['id'] ?? '');
+                if ($cst === '' || isset($by[$cst])) {
+                    continue;
+                }
+                $name  = trim((string)($c['name'] ?? ''));
+                $email = trim((string)($c['email'] ?? ''));
+                $by[$cst] = [
+                    'key'    => $cst,
+                    'name'   => $name !== '' ? $name : ($email !== '' ? $email : $cst),
+                    'org_id' => '',
+                    'linked' => false,
+                ];
+            }
+        }
+    }
+
+    return ['by_customer' => $by, 'warnings' => $warnings];
+}
+
+/** Identité client d'un cst_… (annuaire, sinon l'id seul). */
+function mollie_client_for(array $directory, string $cst): array
+{
+    return $directory['by_customer'][$cst] ?? ['key' => $cst, 'name' => $cst !== '' ? $cst : '—', 'org_id' => '', 'linked' => false];
+}
+
+/** Tri de la page : actifs d'abord, puis prochaine échéance / date de début. */
+function mollie_sort_subscriptions(array &$subscriptions): void
+{
+    $rank = ['active' => 0, 'pending' => 1, 'suspended' => 2, 'completed' => 3, 'canceled' => 4];
+    usort($subscriptions, static function (array $a, array $b) use ($rank): int {
+        $ra = $rank[$a['status']] ?? 5;
+        $rb = $rank[$b['status']] ?? 5;
+        if ($ra !== $rb) {
+            return $ra <=> $rb;
+        }
+        $ta = $a['end_ts'] ?? $a['start_ts'] ?? PHP_INT_MAX;
+        $tb = $b['end_ts'] ?? $b['start_ts'] ?? PHP_INT_MAX;
+        return ($ta <=> $tb) ?: strcmp(mb_strtolower($a['client_name'], 'UTF-8'), mb_strtolower($b['client_name'], 'UTF-8'));
+    });
+}
+
+/** Client Mollie (cst_…) passé par le navigateur, validé, ou réponse d'erreur. */
+function mollie_customer_param_or_exit(string $raw): string
+{
+    $cst = trim($raw);
+    if (!mollieIsCustomerId($cst)) {
+        send_json(400, ['ok' => false, 'error' => 'Client Mollie non identifié.']);
+    }
+    return $cst;
+}
+
+/** Abonnement Mollie brut, lu SOUS le client, ou réponse JSON d'erreur. */
+function mollie_subscription_or_exit(string $customerId, string $id): array
+{
+    if (!mollieIsSubscriptionId($id)) {
+        send_json(404, ['ok' => false, 'error' => 'Abonnement introuvable.']);
+    }
+    $r = mollieGetCustomerSubscription($customerId, $id);
+    if (!$r['ok']) {
+        if ($r['status'] === 404) {
+            send_json(404, ['ok' => false, 'error' => 'Abonnement introuvable.']);
+        }
+        send_json(200, ['ok' => false, 'error' => $r['error'], 'code' => 'MOLLIE']);
+    }
+    return $r['subscription'];
+}
+
+/** Mollie configuré, sinon réponse d'erreur explicite. */
+function mollie_require_configured(): void
+{
+    require_once __DIR__ . '/../include/mollie_client.php';
+    if (!mollieConfigured()) {
+        send_json(200, [
+            'ok'    => false,
+            'code'  => 'MOLLIE_CONFIG',
+            'error' => 'Mollie n\'est pas configuré (MOLIE_API_KEY absente du Secret du portail gestion).',
+        ]);
+    }
+}
+
+/** Qui a fait l'action (journal PHP). */
+function support_actor(array $user): string
+{
+    $email = trim((string)($user['email'] ?? ''));
+    return $email !== '' ? $email : ('#' . (string)($user['id'] ?? '?'));
+}
 
 function invoice_status_label($status): string
 {
@@ -1677,58 +1898,194 @@ try {
         // ─────────────────────────────────────────────────────────────────────
         //  ABONNEMENTS
         // ─────────────────────────────────────────────────────────────────────
+        // Source : API Mollie en direct (plus n8n), comme le portail client —
+        // mais pour TOUS les clients du profil Mollie. Réservé au support.
+        // Avec ?org=<uuid> (raccourci de /entreprises) : uniquement le client
+        // Mollie de cette organisation (attribut « moliecliid »).
+        //
+        // NB : HTTP 200 + ok:false en cas d'échec (cf. org.list) — Traefik
+        // remplace le corps des réponses 5xx et effacerait le diagnostic.
         case 'subscription.list': {
-            $resp = n8n_call(['action' => 'subscription.list', 'client_id' => $clientId]);
-            ensure_ok($resp);
+            require_support($user);
+            mollie_require_configured();
 
-            $rows = extract_rows($resp['json'], ['subscriptions', 'abonnements', 'contracts'], ['id', 'ref', 'reference']);
-            $subscriptions = array_map('normalize_subscription', $rows);
+            $orgUid   = gnl_org_filter();
+            $warnings = [];
+
+            if ($orgUid !== '') {
+                require_once __DIR__ . '/../include/keycloak_esp_client.php';
+                $o = kcEspOrganizationById($orgUid);
+                if (!$o['ok'] || !is_array($o['org'])) {
+                    send_json(200, ['ok' => false, 'code' => 'KEYCLOAK', 'error' => $o['error'] !== '' ? $o['error'] : 'Organisation introuvable.']);
+                }
+                $cst = trim((string)(($o['org']['attributes'] ?? [])[MOLLIE_USER_ATTRIBUTE] ?? ''));
+                $client = [
+                    'key'    => $cst,
+                    'name'   => (string)($o['org']['label'] !== '' ? $o['org']['label'] : $orgUid),
+                    'org_id' => (string)$o['org']['id'],
+                    'linked' => true,
+                ];
+                if ($cst === '' || !mollieIsCustomerId($cst)) {
+                    send_json(200, [
+                        'ok' => true, 'linked' => false, 'count' => 0, 'subscriptions' => [], 'clients' => [],
+                        'can_manage' => true, 'interval_choices' => [], 'truncated' => false, 'warnings' => [],
+                    ]);
+                }
+                $r = mollieListCustomerSubscriptions($cst);
+                if (!$r['ok']) {
+                    send_json(200, ['ok' => false, 'error' => $r['error'], 'code' => 'MOLLIE']);
+                }
+                $truncated = false;
+                $subscriptions = [];
+                foreach ($r['subscriptions'] as $row) {
+                    $subscriptions[] = normalize_mollie_subscription($row, $client);
+                }
+            } else {
+                $r = mollieListAllSubscriptions();
+                if (!$r['ok']) {
+                    send_json(200, ['ok' => false, 'error' => $r['error'], 'code' => 'MOLLIE']);
+                }
+                $truncated = (bool)$r['truncated'];
+                $dir = mollie_client_directory();
+                $warnings = $dir['warnings'];
+                $subscriptions = [];
+                foreach ($r['subscriptions'] as $row) {
+                    $subscriptions[] = normalize_mollie_subscription($row, mollie_client_for($dir, (string)($row['customerId'] ?? '')));
+                }
+            }
+
+            mollie_sort_subscriptions($subscriptions);
+
+            // Liste des clients pour le menu déroulant « Tous les clients ».
+            $clients = [];
+            foreach ($subscriptions as $sub) {
+                $k = $sub['client_key'];
+                if (!isset($clients[$k])) {
+                    $clients[$k] = ['key' => $k, 'name' => $sub['client_name'], 'org_id' => $sub['client_org_id'], 'linked' => $sub['client_linked'], 'count' => 0];
+                }
+                $clients[$k]['count']++;
+            }
+            $clients = array_values($clients);
+            usort($clients, static function (array $a, array $b): int {
+                return strcmp(mb_strtolower($a['name'], 'UTF-8'), mb_strtolower($b['name'], 'UTF-8')) ?: strcmp($a['key'], $b['key']);
+            });
+
+            $choices = [];
+            foreach (MOLLIE_INTERVAL_CHOICES as $interval => $months) {
+                $choices[] = ['value' => $interval, 'months' => $months, 'label' => mollieIntervalLabel($interval)];
+            }
 
             send_json(200, [
-                'ok'            => true,
-                'count'         => count($subscriptions),
-                'subscriptions' => $subscriptions,
+                'ok'               => true,
+                'linked'           => true,
+                'count'            => count($subscriptions),
+                'subscriptions'    => $subscriptions,
+                'clients'          => $clients,
+                'can_manage'       => true,
+                'interval_choices' => $choices,
+                'truncated'        => $truncated,
+                'warnings'         => $warnings,
             ]);
         }
 
         case 'subscription.detail': {
-            $id  = trim((string)($_GET['id'] ?? ''));
-            $ref = trim((string)($_GET['ref'] ?? ''));
-            if ($id === '' && $ref === '') {
+            require_support($user);
+            mollie_require_configured();
+            $id = trim((string)($_GET['id'] ?? ($_GET['ref'] ?? '')));
+            if ($id === '') {
                 send_json(400, ['ok' => false, 'error' => 'Paramètre « id » ou « ref » requis.']);
             }
-
-            $resp = n8n_call([
-                'action'    => 'subscription.detail',
-                'client_id' => $clientId,
-                'id'        => $id,
-                'ref'       => $ref,
-            ]);
-            ensure_ok($resp);
-
-            $rows = extract_rows($resp['json'], ['subscriptions', 'abonnements', 'contracts'], ['id', 'ref', 'reference']);
-
-            if (($id !== '' || $ref !== '') && count($rows) > 1) {
-                $rows = array_values(array_filter($rows, static function ($r) use ($id, $ref): bool {
-                    if (!is_array($r)) {
-                        return false;
-                    }
-                    $rId  = (string)($r['id'] ?? $r['rowid'] ?? '');
-                    $rRef = (string)($r['ref'] ?? $r['reference'] ?? '');
-                    return ($id !== '' && $rId === $id) || ($ref !== '' && $rRef === $ref);
-                }));
-            }
-
-            if (empty($rows)) {
-                send_json(404, ['ok' => false, 'error' => 'Abonnement introuvable.']);
-            }
-
-            $subscriptions = array_map('normalize_subscription', $rows);
+            $cst = mollie_customer_param_or_exit((string)($_GET['customer'] ?? ''));
+            $sub = mollie_subscription_or_exit($cst, $id);
+            $dir = mollie_client_directory(false);
             send_json(200, [
                 'ok'            => true,
-                'count'         => count($subscriptions),
-                'subscriptions' => $subscriptions,
+                'linked'        => true,
+                'count'         => 1,
+                'subscriptions' => [normalize_mollie_subscription($sub, mollie_client_for($dir, $cst))],
             ]);
+        }
+
+        // Moyen de paiement actuel (libellé seulement, pour la modale).
+        case 'subscription.mandate': {
+            require_support($user);
+            mollie_require_configured();
+            $cst = mollie_customer_param_or_exit((string)($_GET['customer'] ?? ''));
+            $sub = mollie_subscription_or_exit($cst, trim((string)($_GET['id'] ?? '')));
+            $mandateId = trim((string)($sub['mandateId'] ?? ''));
+            if ($mandateId === '') {
+                send_json(200, ['ok' => true, 'label' => '', 'status' => '']);
+            }
+            $m = mollieGetCustomerMandate($cst, $mandateId);
+            if (!$m['ok']) {
+                send_json(200, ['ok' => true, 'label' => '', 'status' => '']);
+            }
+            send_json(200, [
+                'ok'     => true,
+                'label'  => mollieMandateLabel($m['mandate']),
+                'status' => (string)($m['mandate']['status'] ?? ''),
+            ]);
+        }
+
+        // Changement de fréquence. Le montant n'est JAMAIS fourni par le
+        // navigateur : il est recalculé ici au prorata du prix mensuel actuel.
+        case 'subscription.update_interval': {
+            require_post();
+            csrf_check();
+            require_support($user);
+            mollie_require_configured();
+            $cst = mollie_customer_param_or_exit((string)($_POST['customer'] ?? ''));
+            $sub = mollie_subscription_or_exit($cst, trim((string)($_POST['id'] ?? '')));
+
+            $interval = trim((string)($_POST['interval'] ?? ''));
+            if (!array_key_exists($interval, MOLLIE_INTERVAL_CHOICES)) {
+                send_json(400, ['ok' => false, 'error' => 'Fréquence non proposée.']);
+            }
+            $caps = normalize_mollie_subscription($sub)['actions'];
+            if (!$caps['can_change_interval']) {
+                send_json(409, ['ok' => false, 'error' => $caps['interval_reason'] ?: 'Fréquence non modifiable.']);
+            }
+            if (mollieIntervalMonths((string)($sub['interval'] ?? '')) === MOLLIE_INTERVAL_CHOICES[$interval]) {
+                send_json(200, ['ok' => true, 'unchanged' => true, 'subscription' => normalize_mollie_subscription($sub)]);
+            }
+
+            $amount = mollieScaleAmount($sub, MOLLIE_INTERVAL_CHOICES[$interval]);
+            if ($amount === null) {
+                send_json(409, ['ok' => false, 'error' => 'Montant non recalculable : modification à faire directement dans Mollie.']);
+            }
+
+            $r = mollieUpdateCustomerSubscription($cst, (string)$sub['id'], [
+                'interval' => $interval,
+                'amount'   => ['currency' => (string)($sub['amount']['currency'] ?? 'EUR'), 'value' => $amount],
+            ]);
+            if (!$r['ok']) {
+                send_json(200, ['ok' => false, 'error' => $r['error'], 'code' => 'MOLLIE']);
+            }
+            error_log('[mollie] ' . $sub['id'] . ' (' . $cst . ') : fréquence ' . ($sub['interval'] ?? '?') . ' → ' . $interval
+                . ', montant ' . ($sub['amount']['value'] ?? '?') . ' → ' . $amount . ' — console support, ' . support_actor($user) . '.');
+            send_json(200, ['ok' => true, 'subscription' => normalize_mollie_subscription($r['subscription'])]);
+        }
+
+        // Résiliation (DELETE Mollie : définitive, aucune échéance future).
+        case 'subscription.cancel': {
+            require_post();
+            csrf_check();
+            require_support($user);
+            mollie_require_configured();
+            $cst = mollie_customer_param_or_exit((string)($_POST['customer'] ?? ''));
+            $sub = mollie_subscription_or_exit($cst, trim((string)($_POST['id'] ?? '')));
+
+            $caps = mollieSubscriptionCapabilities($sub);
+            if (!$caps['can_cancel']) {
+                send_json(409, ['ok' => false, 'error' => 'Cet abonnement est déjà arrêté.']);
+            }
+            $r = mollieCancelCustomerSubscription($cst, (string)$sub['id']);
+            if (!$r['ok']) {
+                send_json(200, ['ok' => false, 'error' => $r['error'], 'code' => 'MOLLIE']);
+            }
+            error_log('[mollie] ' . $sub['id'] . ' (' . $cst . ') résilié — console support, ' . support_actor($user) . '.');
+            $out = $r['subscription'] !== [] ? $r['subscription'] : array_merge($sub, ['status' => 'canceled']);
+            send_json(200, ['ok' => true, 'subscription' => normalize_mollie_subscription($out)]);
         }
 
         // ─────────────────────────────────────────────────────────────────────
