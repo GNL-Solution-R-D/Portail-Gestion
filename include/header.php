@@ -211,7 +211,7 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['csrf'])) {
     height: 2.25rem;
     padding: 0 0.5rem;
     border: 1px solid transparent;
-    border-radius: 0.5rem;
+    border-radius: 3px;
     background: transparent;
     color: inherit;
     cursor: pointer;
@@ -314,9 +314,9 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['csrf'])) {
 <div id="appHeader" class="bg-background w-full border shadow-sm">
   <nav class="w-full overflow-visible rounded-lg border border-transparent p-2 shadow-transparent">
     <div class="relative flex items-center gap-8">
-      <a href="./dashboard" class="rounded-md px-2.5 py-2 transition-colors">
-        <p class="mt-1 ml-1 text-base font-semibold">GNL Solution</p>
-        <p class="mt-1 ml-1 text-base font-semibold">Portail Gestion Infrasructure</p>
+      <a href="./dashboard" class="rounded px-2.5 py-2 transition-colors hover:text-foreground hover:bg-secondary">
+        <p class="ml-1 text-base font-semibold">GNL Solution</p>
+        <p class="mt-1 ml-1 text-base font-semibold">Portail Association &amp; Entreprise</p>
       </a>
 
       <div class="ml-auto flex items-center gap-2">
@@ -326,7 +326,7 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['csrf'])) {
             <circle cx="11" cy="11" r="8"></circle>
             <path d="m21 21-4.3-4.3"></path>
           </svg>
-          <input id="<?php echo htmlspecialchars($searchInputId, ENT_QUOTES, 'UTF-8'); ?>" type="search" autocomplete="off" data-slot="input" class="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive pl-10" placeholder="<?php echo htmlspecialchars($searchPlaceholder, ENT_QUOTES, 'UTF-8'); ?>"/>
+          <input id="<?php echo htmlspecialchars($searchInputId, ENT_QUOTES, 'UTF-8'); ?>" type="search" autocomplete="off" data-slot="input" class="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive pl-10" placeholder="<?php echo htmlspecialchars($searchPlaceholder, ENT_QUOTES, 'UTF-8'); ?>"/>
         </div>
         <?php endif; ?>
 
@@ -335,7 +335,7 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['csrf'])) {
             type="button"
             id="notificationMenuButton"
             data-slot="button"
-            class="items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg:not([class*=&#x27;size-&#x27;])]:size-4 shrink-0 [&amp;_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 size-9 hidden lg:grid"
+            class="items-center justify-center gap-2 whitespace-nowrap rounded text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg:not([class*=&#x27;size-&#x27;])]:size-4 shrink-0 [&amp;_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 size-9 hidden lg:grid"
             aria-expanded="false"
             aria-haspopup="true"
             aria-controls="notificationMenuDropdown"
@@ -365,7 +365,7 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['csrf'])) {
           type="button"
           id="themeToggleButton"
           data-slot="button"
-          class="theme-toggle items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg:not([class*=&#x27;size-&#x27;])]:size-4 shrink-0 [&amp;_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 size-9 grid place-items-center"
+          class="theme-toggle items-center justify-center gap-2 whitespace-nowrap rounded text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg:not([class*=&#x27;size-&#x27;])]:size-4 shrink-0 [&amp;_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 size-9 grid place-items-center"
           aria-label="Activer le mode sombre"
           title="Activer le mode sombre"
           aria-pressed="false"
@@ -522,7 +522,12 @@ if ($langMenuTitle === 'language_menu_title') {
             </span>
 
             <div class="user-menu__actions">
-              <a href="https://auth.gnl-solution.fr/auth/realms/client-auth/account/" class="priority-item flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm outline-none transition-all hover:bg-accent hover:text-accent-foreground" role="menuitem">Paramètres</a>
+              <!-- « Mon compte » = pages/account.php : profil, identifiants,
+                   mot de passe, 2FA et sessions, lus et réécrits dans Keycloak
+                   via l'Admin REST (include/keycloak_account.php). Pointait
+                   auparavant vers la console Keycloak, qui faisait sortir le
+                   client du portail. -->
+              <a href="/account" class="priority-item flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm outline-none transition-all hover:bg-accent hover:text-accent-foreground" role="menuitem">Mon compte</a>
               <a href="/deconnexion" class="priority-item flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm outline-none transition-all hover:bg-accent hover:text-accent-foreground" role="menuitem">Déconnexion</a>
             </div>
           </div>
@@ -536,7 +541,9 @@ if ($langMenuTitle === 'language_menu_title') {
 <section aria-label="Notifications alt+T" tabindex="-1" aria-live="polite" aria-relevant="additions text" aria-atomic="false"></section>
 
 <script>
-  window.NOTIF_API = window.NOTIF_API || '/data/notifications_api.php';
+  // data/notifications_api.php a été fusionné dans data/portail_api.php
+  // (actions préfixées « notification.list » / « notification.read »).
+  window.NOTIF_API = window.NOTIF_API || '/data/portail_api.php';
   window.NOTIF_CSRF = <?php echo json_encode($_SESSION['csrf'] ?? '', JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
 </script>
 
@@ -550,7 +557,7 @@ if ($langMenuTitle === 'language_menu_title') {
 
   if (!menu || !button || !dropdown || !list) return;
 
-  const API     = window.NOTIF_API || '/data/notifications_api.php';
+  const API     = window.NOTIF_API || '/data/portail_api.php';
   const CSRF    = window.NOTIF_CSRF || '';
   const POLL_MS = 30000;
 
@@ -609,7 +616,7 @@ if ($langMenuTitle === 'language_menu_title') {
 
   async function load() {
     try {
-      const res = await fetch(API + '?action=list', {
+      const res = await fetch(API + '?action=notification.list', {
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin'
       });
@@ -626,7 +633,7 @@ if ($langMenuTitle === 'language_menu_title') {
   async function markAllRead() {
     if (unread <= 0) return;
     try {
-      const res = await fetch(API + '?action=read', {
+      const res = await fetch(API + '?action=notification.read', {
         method: 'POST',
         headers: {
           'X-CSRF-Token': CSRF,
