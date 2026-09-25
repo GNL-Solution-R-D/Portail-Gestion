@@ -25,6 +25,13 @@ if (is_readable($portailClientPath)) {
 
 require_once '../data/zabbix_api.php';
 
+// Catalogue des services achetés (mêmes libellés que la barre latérale).
+// Best-effort : absent → la légende retombe sur le nom du deployment.
+$servicesCatalogPath = __DIR__ . '/../include/services_catalog.php';
+if (is_readable($servicesCatalogPath)) {
+    require_once $servicesCatalogPath;
+}
+
 if (accountSessionsIsCurrentSessionRevoked($pdo, sessionUserId())) {
     accountSessionsDestroyPhpSession();
     header('Location: /connexion?error=' . urlencode(t('Cette session a été déconnectée depuis vos paramètres.')));
@@ -38,7 +45,7 @@ $siret        = sessionUserField('siret');
 $perm_id      = sessionUserField('perm_id');
 $user_account = sessionUserId();
 
-$k8s_namespace = sessionUserNamespace();
+$k8s_namespace = sessionUserNsK8s();
 
 // ── Domaines PowerDNS ────────────────────────────────────────────────────────
 $domains = [];
@@ -76,7 +83,7 @@ if (!function_exists('dashboardRenderWidgetErrorBadge')) {
     {
         if ($errorCode === null || $errorCode === '') return '';
         $safeCode = htmlspecialchars($errorCode, ENT_QUOTES, 'UTF-8');
-        return '<span data-slot="badge" class="inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 transition-[color,box-shadow] overflow-hidden border-transparent gap-1 bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400">Erreur ' . $safeCode . '</span>';
+        return '<span data-slot="badge" class="inline-flex items-center justify-center rounded border px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 transition-[color,box-shadow] overflow-hidden border-transparent gap-1 bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400">Erreur ' . $safeCode . '</span>';
     }
 }
 
@@ -211,28 +218,66 @@ if ($k8s_namespace !== '') {
 // de sorte que les cartes et le graphique restent inchangés.
 $visit_stats_by_deployment = [];
 $visitors_error_code       = null;
+$visitors_load_failed      = false;
 $current_month_hits        = 0;
 $previous_month_hits       = 0;
 $by_month_raw              = [];
 
 if ($k8s_namespace !== '' && $k8s_deployments_names !== []) {
     // 1) Source primaire : API portail (n8n) — uniquement si le client est dispo.
+    //
+    // Fiabilisation (n8n parfois lent au premier appel → « Aucune donnée »
+    // jusqu'à plusieurs rafraîchissements) :
+    //   - délai porté de 4 s à 8 s, et UNE nouvelle tentative si la 1re échoue
+    //     (exception / délai dépassé) ou revient vide ;
+    //   - dernier résultat non vide mis en cache session : servi directement
+    //     pendant DASHBOARD_STATS_TTL, et en secours (même périmé) si n8n
+    //     ne répond pas du tout.
     if (function_exists('portailFetchDashboardStats')) {
-        try {
-            $apiStats = portailFetchDashboardStats(sessionUserArray(), $k8s_deployments_names);
-            $visit_stats_by_deployment = is_array($apiStats['by_deployment'] ?? null)
-                ? $apiStats['by_deployment']
-                : [];
+        $statsCacheKey = 'dashboard_stats_cache';
+        $statsCacheId  = $k8s_namespace . '|' . implode(',', $k8s_deployments_names);
+        $statsCache    = $_SESSION[$statsCacheKey] ?? null;
+        $statsCacheOk  = is_array($statsCache)
+            && ($statsCache['id'] ?? null) === $statsCacheId
+            && is_array($statsCache['data'] ?? null)
+            && $statsCache['data'] !== [];
+        $statsTtl = 300; // 5 min
 
-            // Badge d'erreur sur la carte si n8n répond hors 2xx sans donnée.
-            $apiStatus = (int)($apiStats['status'] ?? 0);
-            if ($visit_stats_by_deployment === [] && $apiStatus !== 0 && ($apiStatus < 200 || $apiStatus >= 300)) {
-                $visitors_error_code = (string)$apiStatus;
+        if ($statsCacheOk && (time() - (int)($statsCache['at'] ?? 0)) < $statsTtl) {
+            $visit_stats_by_deployment = $statsCache['data'];
+        } else {
+            $lastError  = null;
+            $lastStatus = 0;
+            for ($attempt = 1; $attempt <= 2; $attempt++) {
+                try {
+                    $apiStats = portailFetchDashboardStats(sessionUserArray(), $k8s_deployments_names, 8, 3);
+                    $visit_stats_by_deployment = is_array($apiStats['by_deployment'] ?? null)
+                        ? $apiStats['by_deployment']
+                        : [];
+                    $lastStatus = (int)($apiStats['status'] ?? 0);
+                    $lastError  = null;
+                    if ($visit_stats_by_deployment !== []) break;
+                    error_log('[dashboard] stats API: réponse vide (HTTP ' . $lastStatus . '), tentative ' . $attempt);
+                } catch (Throwable $e) {
+                    $visit_stats_by_deployment = [];
+                    $lastError = $e;
+                    error_log('[dashboard] stats API (tentative ' . $attempt . '): ' . $e->getMessage());
+                }
             }
-        } catch (Throwable $e) {
-            $visit_stats_by_deployment = [];
-            $visitors_error_code       = dashboardExtractErrorCode($e);
-            error_log('[dashboard] stats API: ' . $e->getMessage());
+
+            if ($visit_stats_by_deployment !== []) {
+                $_SESSION[$statsCacheKey] = ['id' => $statsCacheId, 'at' => time(), 'data' => $visit_stats_by_deployment];
+            } elseif ($statsCacheOk) {
+                // n8n muet : on ressert les dernières stats connues plutôt qu'un graphique vide.
+                $visit_stats_by_deployment = $statsCache['data'];
+            } elseif ($lastError !== null) {
+                $visitors_error_code = dashboardExtractErrorCode($lastError);
+                $visitors_load_failed = true;
+            } elseif ($lastStatus !== 0 && ($lastStatus < 200 || $lastStatus >= 300)) {
+                // Badge d'erreur sur la carte si n8n répond hors 2xx sans donnée.
+                $visitors_error_code  = (string)$lastStatus;
+                $visitors_load_failed = true;
+            }
         }
     }
 
@@ -282,13 +327,68 @@ for ($i = 11; $i >= 0; $i--) {
     $chart_month_labels[] = $monthNames[(int)date('n', $ts) - 1] . ' ' . date('Y', $ts);
 }
 
-$chart_datasets = [];
+// Une série par deployment du namespace, MÊME sans stats renvoyées par l'API
+// (série à 0) : sinon une application sans trafic disparaît du graphique.
+// Les clés de l'API sont rapprochées sans tenir compte de la casse.
+$statsByLowerName = [];
 foreach ($visit_stats_by_deployment as $depName => $stats) {
+    if (is_array($stats)) $statsByLowerName[strtolower((string)$depName)] = $stats;
+}
+// Aucune stat du tout → pas de séries à 0 : on garde l'état « Aucune donnée ».
+$chart_series_names = $visit_stats_by_deployment !== [] ? $k8s_deployments_names : [];
+foreach (array_keys($visit_stats_by_deployment) as $depName) {
+    $depName = (string)$depName;
+    $known = false;
+    foreach ($chart_series_names as $n) {
+        if (strcasecmp($n, $depName) === 0) { $known = true; break; }
+    }
+    if (!$known) $chart_series_names[] = $depName;
+}
+
+$chart_datasets = [];
+foreach ($chart_series_names as $depName) {
+    $stats  = $statsByLowerName[strtolower((string)$depName)] ?? [];
     $series = [];
     foreach ($chart_month_keys as $key) {
         $series[] = (int)($stats['by_month'][$key] ?? 0);
     }
-    $chart_datasets[$depName] = $series;
+    $chart_datasets[(string)$depName] = $series;
+}
+
+// ── Libellés du graphique : noms affichés dans le menu « Mes services » ───────
+// Le deployment K8s porte l'UID produit (order_product.uid) ou son
+// provider_service_slug : on retrouve l'entrée du catalogue correspondante et
+// on reprend son « name » (renommage client, sinon nom catalogue). Même cache
+// session que services_menu_api.php → pas d'appel n8n supplémentaire en général.
+$chart_dataset_labels = [];
+foreach (array_keys($chart_datasets) as $depName) {
+    $chart_dataset_labels[(string)$depName] = (string)$depName;
+}
+if ($chart_datasets !== [] && function_exists('servicesCatalogFetch')) {
+    try {
+        $catalogClientUid = trim((string)($_SESSION['user']['id'] ?? ''));
+        $catalogClientId  = (int)($_SESSION['user']['account_id'] ?? 0);
+        if ($catalogClientId <= 0 && ctype_digit($catalogClientUid)) {
+            $catalogClientId = (int)$catalogClientUid;
+        }
+        $catalog = servicesCatalogFetch($catalogClientId);
+        $nameByKey = [];
+        foreach (($catalog['entries'] ?? []) as $entry) {
+            if (!is_array($entry)) continue;
+            $label = trim((string)($entry['name'] ?? ''));
+            if ($label === '') continue;
+            foreach (['uid', 'provider_service_slug'] as $k) {
+                $key = strtolower(trim((string)($entry[$k] ?? '')));
+                if ($key !== '' && !isset($nameByKey[$key])) $nameByKey[$key] = $label;
+            }
+        }
+        foreach ($chart_dataset_labels as $depName => $_) {
+            $key = strtolower($depName);
+            if (isset($nameByKey[$key])) $chart_dataset_labels[$depName] = $nameByKey[$key];
+        }
+    } catch (Throwable $e) {
+        error_log('[dashboard] services catalog (libellés graphique) : ' . $e->getMessage());
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -378,14 +478,14 @@ if ($previous_month_hits > 0 && $current_month_hits > 0) {
         <!-- ════════════════════════════════════════════════════════════════
              MÉTRIQUES (4 cards)
         ════════════════════════════════════════════════════════════════ -->
-        <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-5">
 
           <!-- Requêtes ce mois-ci -->
-          <div data-slot="card" class="metric-card bg-background text-card-foreground flex flex-col gap-4 rounded-xl border py-6 shadow-sm transition-shadow hover:shadow-lg">
+          <div data-slot="card" class="metric-card bg-background text-card-foreground flex flex-col gap-4 rounded border py-4 shadow-sm transition-shadow hover:shadow-lg">
             <div class="px-6">
               <div class="flex items-start justify-between gap-4">
-                <div class="flex items-start gap-4 min-w-0">
-                  <div class="bg-muted flex h-10 w-16 items-center justify-center rounded-lg shrink-0">
+                <div class="flex items-center gap-4 min-w-0">
+                  <div class="bg-muted flex h-8 w-20 items-center justify-center rounded shrink-0">
                     <p class="text-base font-bold tracking-tight tabular-nums">
                       <?= $current_month_hits > 0
                           ? number_format($current_month_hits, 0, ',', ' ')
@@ -397,7 +497,7 @@ if ($previous_month_hits > 0 && $current_month_hits > 0) {
                          Amélioration : faute de frappe corrigée
                          Avant : "Requettes" → "Requêtes"
                     ══════════════════════════════════════════════════ -->
-                    <p class="font-bold tracking-tight text-sm"><?= t('Requêtes ce mois-ci') ?></p>
+                    <p class="font-bold tracking-tight text-sm"><?= t('Visiteurs ce mois-ci') ?></p>
                     <?php if ($hits_pct_vs_prev !== null): ?>
                       <p class="text-sm <?= $hits_pct_vs_prev >= 0 ? 'metric-trend-up' : 'metric-trend-down' ?>">
                         <?= ($hits_pct_vs_prev >= 0 ? '↑ +' : '↓ ') . $hits_pct_vs_prev ?><?= t('% vs mois dernier') ?>
@@ -413,11 +513,11 @@ if ($previous_month_hits > 0 && $current_month_hits > 0) {
           </div>
 
           <!-- Nombre d'applications -->
-          <div data-slot="card" class="metric-card bg-background text-card-foreground flex flex-col gap-4 rounded-xl border py-6 shadow-sm transition-shadow hover:shadow-lg">
+          <div data-slot="card" class="metric-card bg-background text-card-foreground flex flex-col gap-4 rounded border py-4 shadow-sm transition-shadow hover:shadow-lg">
             <div class="px-6">
               <div class="flex items-start justify-between gap-4">
-                <div class="flex items-start gap-4 min-w-0">
-                  <div class="bg-muted flex h-10 w-16 items-center justify-center rounded-lg shrink-0">
+                <div class="flex items-center gap-4 min-w-0">
+                  <div class="bg-muted flex h-8 w-20 items-center justify-center rounded shrink-0">
                     <p class="text-base font-bold tracking-tight tabular-nums"><?= (int)$k8s_deployments_count ?></p>
                   </div>
                   <div class="min-w-0 space-y-1">
@@ -425,7 +525,30 @@ if ($previous_month_hits > 0 && $current_month_hits > 0) {
                     <p class="font-bold tracking-tight text-sm"><?= t('Applications') ?></p>
                     <p class="text-sm text-muted-foreground">
                       <?= $k8s_namespace !== ''
-                          ? 'ns : <span class="font-mono text-xs">' . htmlspecialchars($k8s_namespace, ENT_QUOTES, 'UTF-8') . '</span>'
+                          ? 'en service'
+                          : t('namespace non configuré') ?>
+                    </p>
+                  </div>
+                </div>
+                <?= dashboardRenderWidgetErrorBadge($k8s_deployments_error_code) ?>
+              </div>
+            </div>
+          </div>
+
+          <!-- Nombre d'applications -->
+          <div data-slot="card" class="metric-card bg-background text-card-foreground flex flex-col gap-4 rounded border py-4 shadow-sm transition-shadow hover:shadow-lg">
+            <div class="px-6">
+              <div class="flex items-start justify-between gap-4">
+                <div class="flex items-center gap-4 min-w-0">
+                  <div class="bg-muted flex h-8 w-20 items-center justify-center rounded shrink-0">
+                    <p class="text-base font-bold tracking-tight tabular-nums"><?= (int)$k8s_deployments_count ?></p>
+                  </div>
+                  <div class="min-w-0 space-y-1">
+                    <!-- Faute corrigée : "application" → "applications" -->
+                    <p class="font-bold tracking-tight text-sm"><?= t('Employé') ?></p>
+                    <p class="text-sm text-muted-foreground">
+                      <?= $k8s_namespace !== ''
+                          ? 'avec acces'
                           : t('namespace non configuré') ?>
                     </p>
                   </div>
@@ -436,11 +559,11 @@ if ($previous_month_hits > 0 && $current_month_hits > 0) {
           </div>
 
           <!-- Domaines -->
-          <div data-slot="card" class="metric-card bg-background text-card-foreground flex flex-col gap-4 rounded-xl border py-6 shadow-sm transition-shadow hover:shadow-lg">
+          <div data-slot="card" class="metric-card bg-background text-card-foreground flex flex-col gap-4 rounded border py-4 shadow-sm transition-shadow hover:shadow-lg">
             <div class="px-6">
               <div class="flex items-start justify-between gap-4">
-                <div class="flex items-start gap-4 min-w-0">
-                  <div class="bg-muted flex h-10 w-16 items-center justify-center rounded-lg shrink-0">
+                <div class="flex items-center gap-4 min-w-0">
+                  <div class="bg-muted flex h-8 w-20 items-center justify-center rounded shrink-0">
                     <p class="text-base font-bold tracking-tight tabular-nums"><?= (int)$k8s_ingress_domains_count ?></p>
                   </div>
                   <div class="min-w-0 space-y-1">
@@ -467,19 +590,19 @@ if ($previous_month_hits > 0 && $current_month_hits > 0) {
           </div>
 
           <!-- Disponibilité annuelle -->
-          <div data-slot="card" class="metric-card bg-background text-card-foreground flex flex-col gap-4 rounded-xl border py-6 shadow-sm transition-shadow hover:shadow-lg">
+          <div data-slot="card" class="metric-card bg-background text-card-foreground flex flex-col gap-4 rounded border py-4 shadow-sm transition-shadow hover:shadow-lg">
             <div class="px-6">
               <div class="flex items-start justify-between gap-4">
-                <div class="flex items-start gap-4 min-w-0">
-                  <div class="bg-muted flex h-10 w-20 items-center justify-center rounded-lg shrink-0">
+                <div class="flex items-center gap-4 min-w-0">
+                  <div class="bg-muted flex h-8 w-20 items-center justify-center rounded shrink-0">
                     <p class="text-base font-bold tracking-tight tabular-nums">
                       <?= htmlspecialchars($annual_availability_display, ENT_QUOTES, 'UTF-8') ?>
                     </p>
                   </div>
                   <div class="min-w-0 space-y-1">
-                    <p class="font-bold tracking-tight text-sm"><?= t('Disponibilité annuelle') ?></p>
+                    <p class="font-bold tracking-tight text-sm"><?= t('Disponibilité') ?></p>
                     <!-- Faute corrigée : "tout services" → "tous services" -->
-                    <p class="text-sm text-muted-foreground"><?= t('tous services · année en cours') ?></p>
+                    <p class="text-sm text-muted-foreground"><?= t('annuelle') ?></p>
                   </div>
                 </div>
                 <?= dashboardRenderWidgetErrorBadge($availability_error_code) ?>
@@ -493,7 +616,7 @@ if ($previous_month_hits > 0 && $current_month_hits > 0) {
              GRAPHIQUE VISITEURS PAR APPLICATION
         ════════════════════════════════════════════════════════════════ -->
         <div class="mt-6 chart-reveal" data-chart="visitors">
-          <div data-slot="card" class="bg-background text-card-foreground flex flex-col gap-6 rounded-xl border py-3 shadow-sm">
+          <div data-slot="card" class="bg-background text-card-foreground flex flex-col gap-6 rounded border py-3 shadow-sm">
             <div class="flex flex-row items-center justify-between space-y-0 px-6 pb-3 border-b">
               <div class="flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
@@ -502,12 +625,12 @@ if ($previous_month_hits > 0 && $current_month_hits > 0) {
                   <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>
                 </svg>
                 <!-- Faute corrigée : "Requettes" → "Requêtes" -->
-                <h3 class="text-sm font-bold"><?= t('Requêtes par application') ?></h3>
+                <h3 class="text-sm font-bold"><?= t('Visiteurs par application') ?></h3>
               </div>
               <div class="flex items-center gap-3">
                 <span class="text-xs text-muted-foreground"><?= t('12 derniers mois') ?></span>
                 <?php if (!empty($visit_stats_by_deployment)): ?>
-                  <span class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium border-transparent bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400">
+                  <span class="inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium border-transparent bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400">
                     <?= t('Données réelles') ?>
                   </span>
                 <?php endif ?>
@@ -516,11 +639,13 @@ if ($previous_month_hits > 0 && $current_month_hits > 0) {
 
             <div class="px-6 pb-4">
               <div class="h-[320px]">
-                <canvas id="visitorsChart" aria-label="<?= t('Graphique des requêtes par application') ?>" role="img"></canvas>
+                <canvas id="visitorsChart" aria-label="<?= t('Graphique des visiteurs par application') ?>" role="img"></canvas>
               </div>
               <div id="visitorsChartEmpty"
                    class="mt-4 hidden rounded-lg border border-dashed px-4 py-6 text-sm text-muted-foreground">
-                <?= t('Aucune donnée de requêtes disponible pour le moment.') ?>
+                <?= $visitors_load_failed
+                    ? t('Les statistiques n\'ont pas pu être chargées (service indisponible ou trop lent). Rafraîchissez la page dans un instant.')
+                    : t('Aucune donnée de requêtes disponible pour le moment.') ?>
               </div>
               <div id="visitorsChartLegend" class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground"></div>
             </div>
@@ -539,6 +664,11 @@ if ($previous_month_hits > 0 && $current_month_hits > 0) {
   (function () {
     const chartLabels   = <?= json_encode($chart_month_labels, JSON_UNESCAPED_UNICODE) ?>;
     const chartDatasets = <?= json_encode($chart_datasets,     JSON_UNESCAPED_UNICODE) ?>;
+    const chartNames    = <?= json_encode((object)$chart_dataset_labels, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+
+    function displayName(key) {
+      return (chartNames && chartNames[key]) ? String(chartNames[key]) : String(key);
+    }
 
     function prefersReducedMotion() {
       return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -578,7 +708,8 @@ if ($previous_month_hits > 0 && $current_month_hits > 0) {
         dot.className = 'h-2.5 w-2.5 rounded-full shrink-0';
         dot.style.backgroundColor = rgba(rgb, 1);
         const label = document.createElement('span');
-        label.textContent = name;
+        label.textContent = displayName(name);
+        label.title = name;
         item.appendChild(dot);
         item.appendChild(label);
         legend.appendChild(item);
@@ -609,7 +740,7 @@ if ($previous_month_hits > 0 && $current_month_hits > 0) {
         gradient.addColorStop(1, rgba(rgb, 0));
         const data = chartDatasets[name];
         return {
-          label: name,
+          label: displayName(name),
           data,
           borderColor:               rgba(rgb, 1),
           backgroundColor:           gradient,
@@ -688,59 +819,12 @@ if ($previous_month_hits > 0 && $current_month_hits > 0) {
        Amélioration #6 — collapsible JS (même logique que les autres pages)
        À terme : extraire dans assets/js/collapsible.js et charger avec defer
   ════════════════════════════════════════════════════════════════════════ -->
-  <script>
-  (function () {
-    function ready(fn) { if (document.readyState !== 'loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
-    ready(function () {
-      document.querySelectorAll('[data-slot="collapsible-trigger"]').forEach(function (btn) {
-        btn.classList.add('collapsible-trigger');
-        var targetId = btn.getAttribute('aria-controls');
-        var content  = targetId ? document.getElementById(targetId) : null;
-        if (!content) {
-          var p = btn.closest('[data-slot="collapsible"]');
-          if (p) content = p.querySelector('[data-slot="collapsible-content"]');
-        }
-        if (!content) return;
-        content.classList.add('collapsible-content');
-        var chev = btn.querySelector('.lucide-chevron-right');
-        if (chev) chev.classList.add('collapsible-chevron');
-        var expanded = btn.getAttribute('aria-expanded') === 'true';
-        if (expanded) { content.hidden = false; content.classList.add('is-open'); content.style.height = 'auto'; }
-        else          { content.hidden = true;  content.classList.remove('is-open'); content.style.height = '0px'; }
-        btn.addEventListener('click', function (e) {
-          e.preventDefault();
-          var isOpen = btn.getAttribute('aria-expanded') === 'true';
-          if (!isOpen) {
-            btn.setAttribute('aria-expanded', 'true'); btn.setAttribute('data-state', 'open');
-            content.hidden = false; content.classList.add('is-open'); content.setAttribute('data-state', 'open');
-            content.style.height = '0px';
-            requestAnimationFrame(function () { content.style.height = content.scrollHeight + 'px'; });
-            content.addEventListener('transitionend', function onEnd(ev) {
-              if (ev.propertyName !== 'height') return;
-              content.style.height = 'auto';
-              content.removeEventListener('transitionend', onEnd);
-            });
-          } else {
-            btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('data-state', 'closed');
-            content.classList.remove('is-open'); content.setAttribute('data-state', 'closed');
-            content.style.height = content.scrollHeight + 'px';
-            requestAnimationFrame(function () { content.style.height = '0px'; });
-            content.addEventListener('transitionend', function onEndClose(ev) {
-              if (ev.propertyName !== 'height') return;
-              content.hidden = true;
-              content.removeEventListener('transitionend', onEndClose);
-            });
-          }
-        }, { passive: false });
-      });
-    });
-  })();
-  </script>
+  <script src="../assets/js/collapsible.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/js/collapsible.js') ?>"></script>
 
   <script>
     window.K8S_API_URL = '../data/k8s_api.php';
     window.K8S_UI_BASE = './pages/';
   </script>
-  <script src="../assets/js/k8s_menu.js" defer></script>
+  <script src="../assets/js/services_menu.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/js/services_menu.js') ?>" defer></script>
 </body>
 </html>
