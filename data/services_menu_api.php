@@ -110,7 +110,29 @@ if ($accountId > 0) {
 
 try {
     $force = isset($_GET['refresh']) && $_GET['refresh'] !== '0' && $_GET['refresh'] !== '';
-    $data  = servicesCatalogFetch($clientId, $force);
+
+    // Portail GESTION : services de TOUS les clients (toutes les organisations
+    // Keycloak de l'espace client). « ?org=<uuid> » (raccourci /entreprises)
+    // restreint à une seule entreprise ; un paramètre mal formé est ignoré.
+    $onlyOrg = trim((string)($_GET['org'] ?? ''));
+    if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $onlyOrg)) {
+        $onlyOrg = '';
+    }
+
+    // Beaucoup d'appels n8n (en parallèle) au premier chargement : marge de temps.
+    @set_time_limit(90);
+    // Libère la session pendant les appels : les autres requêtes de l'admin ne
+    // restent pas bloquées derrière. Réouverte ensuite pour écrire le cache.
+    $cachedAll = $_SESSION[SERVICES_CATALOG_ALL_CACHE_KEY] ?? null;
+    session_write_close();
+    $_SESSION[SERVICES_CATALOG_ALL_CACHE_KEY] = $cachedAll;
+    $data = servicesCatalogFetchAll($force, $onlyOrg);
+    if (!$data['cached']) {
+        $fresh = $_SESSION[SERVICES_CATALOG_ALL_CACHE_KEY] ?? null;
+        @session_start();
+        $_SESSION[SERVICES_CATALOG_ALL_CACHE_KEY] = $fresh;
+        session_write_close();
+    }
 
     $menus = array_fill_keys(servicesCatalogMenus(), []);
     $total = 0;
@@ -134,6 +156,7 @@ try {
         'ok'       => true,
         'count'    => $total,
         'orders'   => (int)$data['orders'],
+        'clients'  => (int)($data['clients'] ?? 0),
         'menus'    => $menus,
         'unmapped' => $data['unmapped'],
         'warnings' => $data['warnings'],

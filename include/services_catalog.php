@@ -548,5 +548,412 @@ function servicesCatalogFindByProviderSlug(int $clientId, string $providerType, 
 /** Vide le cache (appelé après un renommage). */
 function servicesCatalogInvalidate(): void
 {
-    unset($_SESSION[SERVICES_CATALOG_CACHE_KEY]);
+    unset($_SESSION[SERVICES_CATALOG_CACHE_KEY], $_SESSION[SERVICES_CATALOG_ALL_CACHE_KEY]);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  PORTAIL GESTION — SERVICES DE TOUS LES CLIENTS
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Côté portail client, n8n limite chaque appel à l'organisation de la session
+ * (clé « organization_uid » injectée par portailApiCall). Le portail gestion
+ * n'a pas d'organisation à lui : on parcourt donc TOUTES les organisations du
+ * realm espace client (kcEspOrganizations, même source que /entreprises) et on
+ * rejoue la même chaîne n8n pour chacune, avec son organization_uid :
+ *
+ *   product.list    → 1 appel (catalogue commun)
+ *   order.list      → 1 appel par organisation            ┐ en parallèle
+ *   deployment.list → 1 appel par organisation (renommages)│ (curl_multi,
+ *   order.product   → 1 appel par commande                 ┘  lots de N)
+ *
+ * Chaque entrée porte en plus « client_name » et « organization_uid » : le menu
+ * regroupe les services par entreprise.
+ *
+ * « $onlyOrg » (UUID) restreint à une organisation : raccourci ?org= de
+ * /entreprises.
+ */
+
+/** Durée de vie du cache « tous clients » (secondes) : beaucoup d'appels n8n. */
+if (!defined('SERVICES_CATALOG_ALL_TTL')) {
+    define('SERVICES_CATALOG_ALL_TTL', 300);
+}
+
+/** Appels n8n simultanés au maximum. */
+if (!defined('SERVICES_CATALOG_ALL_CONCURRENCY')) {
+    define('SERVICES_CATALOG_ALL_CONCURRENCY', 8);
+}
+
+/** Garde-fou : commandes interrogées au total, toutes organisations confondues. */
+if (!defined('SERVICES_CATALOG_ALL_MAX_ORDERS')) {
+    define('SERVICES_CATALOG_ALL_MAX_ORDERS', 400);
+}
+
+if (!defined('SERVICES_CATALOG_ALL_CACHE_KEY')) {
+    define('SERVICES_CATALOG_ALL_CACHE_KEY', 'services_catalog_all_cache');
+}
+
+/**
+ * Lignes exploitables d'une réponse n8n déjà reçue (même contrôle que
+ * servicesCatalogCall(), sans refaire l'appel).
+ */
+function servicesCatalogParse(array $resp, string $label, array $containerKeys, array $idKeys, array &$warnings): array
+{
+    if (($resp['error'] ?? '') !== '') {
+        $warnings[] = $label . ' : ' . $resp['error'];
+        return [];
+    }
+
+    $status = (int)($resp['status'] ?? 0);
+    if ($status !== 0 && ($status < 200 || $status >= 300)) {
+        $warnings[] = $label . ' : HTTP ' . $status;
+        return [];
+    }
+
+    $rows = servicesCatalogRows($resp['json'] ?? null, $containerKeys, $idKeys);
+
+    if (!$rows) {
+        $body = $resp['json'] ?? null;
+        $legitEmpty = ($body === null) || (is_array($body) && $body === [])
+            || (is_array($body) && ($body['ok'] ?? null) === true);
+        // Conteneur attendu présent mais vide ({"orders": []}) : liste vide normale.
+        foreach ($containerKeys as $ck) {
+            if (is_array($body) && isset($body[$ck]) && $body[$ck] === []) {
+                $legitEmpty = true;
+            }
+        }
+        if (!$legitEmpty) {
+            $dump = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if (!is_string($dump)) {
+                $dump = (string)($resp['raw'] ?? '');
+            }
+            $warnings[] = $label . ' : réponse inattendue de n8n — ' . mb_substr($dump, 0, 200);
+        }
+    }
+
+    return $rows;
+}
+
+/**
+ * Plusieurs appels au webhook n8n en parallèle (curl_multi), par lots.
+ * Même forme de réponse que portailApiCall() + clé « error » ('' si OK).
+ * Sans curl : repli séquentiel sur portailApiCall().
+ *
+ * @param array<string,array> $payloads clé libre → payload
+ * @return array<string,array>          même clé → réponse
+ */
+function servicesCatalogMultiCall(array $payloads, int $timeout = 15): array
+{
+    $out = [];
+    if ($payloads === []) {
+        return $out;
+    }
+
+    if (!function_exists('curl_multi_init')) {
+        foreach ($payloads as $key => $payload) {
+            try {
+                $out[$key] = portailApiCall($payload, $timeout) + ['error' => ''];
+            } catch (Throwable $e) {
+                $out[$key] = ['status' => 0, 'json' => null, 'raw' => '', 'error' => $e->getMessage()];
+            }
+        }
+        return $out;
+    }
+
+    $url     = portailApiUrl();
+    $token   = portailApiEnvNonEmpty('N8N_WEBHOOK_TOKEN');
+    $headers = ['Accept: application/json', 'Content-Type: application/json'];
+    if ($token !== null) {
+        $headers[] = 'Authorization: Bearer ' . $token;
+        $headers[] = 'X-GNL-Token: ' . $token;
+    }
+
+    foreach (array_chunk($payloads, max(1, SERVICES_CATALOG_ALL_CONCURRENCY), true) as $batch) {
+        $mh      = curl_multi_init();
+        $handles = [];
+
+        foreach ($batch as $key => $payload) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                CURLOPT_HTTPHEADER     => $headers,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => $timeout,
+                CURLOPT_CONNECTTIMEOUT => 6,
+            ]);
+            curl_multi_add_handle($mh, $ch);
+            $handles[$key] = $ch;
+        }
+
+        do {
+            $status = curl_multi_exec($mh, $running);
+            if ($running) {
+                curl_multi_select($mh, 1.0);
+            }
+        } while ($running && $status === CURLM_OK);
+
+        foreach ($handles as $key => $ch) {
+            $raw   = (string)curl_multi_getcontent($ch);
+            $errno = curl_errno($ch);
+            $out[$key] = [
+                'status' => (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE),
+                'json'   => json_decode($raw, true),
+                'raw'    => $raw,
+                'error'  => $errno !== 0 ? 'Connexion n8n impossible : ' . curl_error($ch) : '',
+            ];
+            curl_multi_remove_handle($mh, $ch);
+            curl_close($ch);
+        }
+        curl_multi_close($mh);
+    }
+
+    return $out;
+}
+
+/**
+ * Construit la liste des services de TOUS les clients (sans cache).
+ *
+ * @return array{entries:array, orders:int, clients:int, unmapped:array, warnings:array}
+ */
+function servicesCatalogBuildAll(string $onlyOrg = ''): array
+{
+    require_once __DIR__ . '/keycloak_esp_client.php';
+
+    $warnings = [];
+
+    // ── 0) Organisations (clients) ───────────────────────────────────────────
+    $fetched = kcEspOrganizations();
+    if (!$fetched['ok']) {
+        throw new RuntimeException('Organisations Keycloak indisponibles : '
+            . ($fetched['error'] !== '' ? $fetched['error'] : 'erreur inconnue'));
+    }
+    if ($fetched['truncated']) {
+        $warnings[] = 'Keycloak : liste des organisations tronquée (plafond atteint).';
+    }
+
+    $orgs = [];
+    foreach ($fetched['orgs'] as $org) {
+        $id = (string)($org['id'] ?? '');
+        if ($id === '' || ($onlyOrg !== '' && strcasecmp($id, $onlyOrg) !== 0)) {
+            continue;
+        }
+        $label = (string)($org['label'] ?? '');
+        $orgs[$id] = $label !== '' ? $label : ((string)($org['name'] ?? '') ?: $id);
+    }
+    if ($orgs === []) {
+        return ['entries' => [], 'orders' => 0, 'clients' => 0, 'unmapped' => [], 'warnings' => $warnings];
+    }
+
+    // ── 1) order.list par organisation + product.list + deployment.list ──────
+    $calls = [];
+    foreach ($orgs as $orgId => $_) {
+        $calls['orders|' . $orgId] = ['action' => 'order.list', 'organization_uid' => $orgId];
+        $calls['labels|' . $orgId] = ['action' => 'deployment.list', 'organization_uid' => $orgId];
+    }
+    // Catalogue commun : demandé dans le contexte de la 1re organisation
+    // (un workflow qui exigerait un organization_uid ne refusera pas l'appel).
+    $calls['catalog'] = ['action' => 'product.list', 'organization_uid' => array_key_first($orgs)];
+
+    $resp = servicesCatalogMultiCall($calls);
+
+    $refsByOrg = [];
+    $nbOrders  = 0;
+    foreach ($orgs as $orgId => $orgLabel) {
+        $rows = servicesCatalogParse(
+            $resp['orders|' . $orgId] ?? [],
+            'order.list (' . $orgLabel . ')',
+            ['orders', 'commandes'],
+            ['id', 'ref', 'reference'],
+            $warnings
+        );
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $ref = servicesCatalogValue($row, ['ref', 'reference', 'number', 'order_number']);
+            if ($ref === '' || in_array($ref, $refsByOrg[$orgId] ?? [], true)) {
+                continue;
+            }
+            if ($nbOrders >= SERVICES_CATALOG_ALL_MAX_ORDERS) {
+                $warnings[] = 'order.list : plus de ' . SERVICES_CATALOG_ALL_MAX_ORDERS
+                    . ' commandes au total — liste limitée.';
+                break 2;
+            }
+            $refsByOrg[$orgId][] = $ref;
+            $nbOrders++;
+        }
+    }
+
+    // Catalogue : slug → nom, menu, provider_type.
+    $catalog = [];
+    foreach (servicesCatalogParse($resp['catalog'] ?? [], 'product.list',
+        ['products', 'produits', 'product', 'catalogue', 'catalog'], ['slug', 'id'], $warnings) as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $slug = servicesCatalogValue($row, ['slug', 'code', 'product_slug']);
+        if ($slug === '') {
+            continue;
+        }
+        $catalog[$slug] = [
+            'name'          => servicesCatalogValue($row, ['name', 'nom', 'label', 'libelle', 'titre'], $slug),
+            'menu'          => strtolower(servicesCatalogValue($row, ['esp_cli_menu_name', 'menu', 'menu_name'])),
+            'type'          => servicesCatalogValue($row, ['type']),
+            'provider_type' => strtolower(servicesCatalogValue($row, ['provider_type'])),
+        ];
+    }
+    if ($catalog === [] && $nbOrders > 0) {
+        $warnings[] = 'product.list : catalogue vide — aucun produit ne peut être rattaché à un menu.';
+    }
+
+    // Renommages (label_portail) : product_uid → display_name, par organisation.
+    $renames = [];
+    foreach ($orgs as $orgId => $orgLabel) {
+        $rows = servicesCatalogParse(
+            $resp['labels|' . $orgId] ?? [],
+            'deployment.list (' . $orgLabel . ')',
+            ['deployments', 'labels', 'label_portail'],
+            ['product_uid', 'uid', 'deployment_name', 'name'],
+            $warnings
+        );
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $uid  = servicesCatalogValue($row, ['product_uid', 'uid', 'deployment_name', 'name']);
+            $disp = servicesCatalogValue($row, ['display_name', 'label']);
+            if ($uid !== '' && $disp !== '') {
+                $renames[$orgId][$uid] = $disp;
+            }
+        }
+    }
+
+    // ── 2) order.product par commande ────────────────────────────────────────
+    $calls = [];
+    foreach ($refsByOrg as $orgId => $refs) {
+        foreach ($refs as $ref) {
+            $calls['lines|' . $orgId . '|' . $ref] = [
+                'action' => 'order.product', 'organization_uid' => $orgId, 'id' => '', 'ref' => $ref,
+            ];
+        }
+    }
+    $resp = servicesCatalogMultiCall($calls);
+
+    $menuKeys = servicesCatalogMenus();
+    $entries  = [];
+    $unmapped = [];
+    $seenUids = [];
+
+    foreach ($refsByOrg as $orgId => $refs) {
+        foreach ($refs as $ref) {
+            $rows = servicesCatalogParse(
+                $resp['lines|' . $orgId . '|' . $ref] ?? [],
+                'order.product (' . $orgs[$orgId] . ' / ' . $ref . ')',
+                ['order_product', 'products', 'produits', 'lignes', 'lines'],
+                ['uid', 'slug'],
+                $warnings
+            );
+
+            foreach ($rows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $rowRef = servicesCatalogValue($row, ['ref', 'reference', 'order_ref']);
+                if ($rowRef !== '' && strcasecmp($rowRef, $ref) !== 0) {
+                    continue;
+                }
+                $status = strtolower(servicesCatalogValue($row, ['status', 'statut', 'state']));
+                if (!in_array($status, servicesCatalogStatuses(), true)) {
+                    continue;
+                }
+                $slug = servicesCatalogValue($row, ['slug', 'produit', 'product', 'code']);
+                if ($slug === '') {
+                    continue;
+                }
+
+                $meta = $catalog[$slug] ?? null;
+                $menu = $meta['menu'] ?? '';
+                if (!in_array($menu, $menuKeys, true)) {
+                    if (!in_array($slug, $unmapped, true)) {
+                        $unmapped[] = $slug;
+                    }
+                    continue;
+                }
+
+                $uid = servicesCatalogValue($row, ['uid', 'product_uid', 'item_uid']);
+                if ($uid !== '') {
+                    if (isset($seenUids[$uid])) {
+                        continue;
+                    }
+                    $seenUids[$uid] = true;
+                }
+
+                $productName = ($meta['name'] ?? '') !== '' ? $meta['name'] : $slug;
+                $displayName = ($uid !== '' && isset($renames[$orgId][$uid])) ? $renames[$orgId][$uid] : '';
+
+                $entries[] = [
+                    'menu'                  => $menu,
+                    'uid'                   => $uid,
+                    'slug'                  => $slug,
+                    'name'                  => $displayName !== '' ? $displayName : $productName,
+                    'product_name'          => $productName,
+                    'display_name'          => $displayName,
+                    'type'                  => $meta['type'] ?? '',
+                    'status'                => $status,
+                    'ref'                   => $rowRef !== '' ? $rowRef : $ref,
+                    'provider_type'         => (string)($meta['provider_type'] ?? ''),
+                    'provider_service_slug' => servicesCatalogValue($row, [
+                        'provider_service_slug', 'service_slug', 'provider_slug',
+                    ]),
+                    // pages/deployment.php (gestion) ne résout pas ?product_uid= :
+                    // entrée non cliquable.
+                    'href'                  => '',
+                    'organization_uid'      => $orgId,
+                    'client_name'           => $orgs[$orgId],
+                ];
+            }
+        }
+    }
+
+    // Tri : entreprise, puis nom du service.
+    usort($entries, static function (array $a, array $b): int {
+        return strcasecmp((string)$a['client_name'], (string)$b['client_name'])
+            ?: strcasecmp((string)$a['name'], (string)$b['name'])
+            ?: strcmp((string)$a['uid'], (string)$b['uid']);
+    });
+
+    return [
+        'entries'  => $entries,
+        'orders'   => $nbOrders,
+        'clients'  => count($orgs),
+        'unmapped' => $unmapped,
+        'warnings' => array_values($warnings),
+    ];
+}
+
+/** Services de tous les clients, mis en cache en session (SERVICES_CATALOG_ALL_TTL). */
+function servicesCatalogFetchAll(bool $force = false, string $onlyOrg = ''): array
+{
+    $cache = $_SESSION[SERVICES_CATALOG_ALL_CACHE_KEY] ?? null;
+    $scope = $onlyOrg !== '' ? strtolower($onlyOrg) : '*';
+
+    if (
+        !$force
+        && is_array($cache)
+        && ($cache['scope'] ?? null) === $scope
+        && (time() - (int)($cache['at'] ?? 0)) < SERVICES_CATALOG_ALL_TTL
+        && is_array($cache['payload'] ?? null)
+    ) {
+        return array_merge($cache['payload'], ['cached' => true]);
+    }
+
+    $payload = servicesCatalogBuildAll($onlyOrg);
+
+    $_SESSION[SERVICES_CATALOG_ALL_CACHE_KEY] = [
+        'scope'   => $scope,
+        'at'      => time(),
+        'payload' => $payload,
+    ];
+
+    return array_merge($payload, ['cached' => false]);
 }

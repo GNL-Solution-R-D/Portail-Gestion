@@ -1,8 +1,8 @@
 /**
  * assets/js/services_menu.js
  *
- * Remplit les dépliants « Mes services » de la barre latérale avec les
- * PRODUITS ACHETÉS par le client (statut active, suspended ou deployment).
+ * PORTAIL GESTION : remplit les dépliants « Client » de la barre latérale avec
+ * les PRODUITS ACHETÉS par TOUS les clients, regroupés par entreprise (statut active, suspended ou deployment).
  *
  * Un seul appel : data/services_menu_api.php, qui enchaîne côté serveur
  * order.list → order.product → product.list et renvoie les entrées déjà
@@ -105,6 +105,9 @@
 
     var url = new URL(apiUrl.toString());
     if (force) url.searchParams.set('refresh', '1');
+    // Portail GESTION : raccourci ?org=<uuid> de /entreprises → une seule entreprise.
+    var pageOrg = new URL(window.location.href).searchParams.get('org');
+    if (pageOrg) url.searchParams.set('org', pageOrg);
 
     try {
       var res = await fetch(url.toString(), { credentials: 'same-origin' });
@@ -131,7 +134,7 @@
         });
 
         if (entries.length) {
-          hosts[key].innerHTML = entries.map(function (e) { return renderEntry(e, key); }).join('');
+          hosts[key].innerHTML = renderGrouped(entries, key);
           showBlock(key, true);
         } else {
           // Aucun service dans cette catégorie : le dépliant disparaît.
@@ -291,6 +294,23 @@
   // Une entrée = une ligne de commande (order_product.uid). Le badge de droite
   // affiche le statut brut de cette ligne (« active », « suspended »,
   // « deployment », …).
+  // Portail GESTION : les entrées (triées par entreprise côté serveur) sont
+  // regroupées sous un intitulé par client dans chaque dépliant.
+  function renderGrouped(entries, menuKey) {
+    var html = '';
+    var current = null;
+    entries.forEach(function (e) {
+      var client = String((e && e.client_name) || '').trim();
+      if (client !== current) {
+        current = client;
+        html += '<div class="text-muted-foreground text-xs font-semibold px-2.5 pt-2 pb-1 truncate" ' +
+          'title="' + escapeHtml(client || 'Client inconnu') + '">' + escapeHtml(client || 'Client inconnu') + '</div>';
+      }
+      html += renderEntry(e, menuKey);
+    });
+    return html;
+  }
+
   function renderEntry(entry, menuKey) {
     var name = String((entry && entry.name) || (entry && entry.slug) || '').trim();
     if (!name) return '';
@@ -326,7 +346,8 @@
     // order_product.provider_service_slug est renseigné. Sinon : simple libellé.
     var href = String((entry && entry.href) || '').trim();
 
-    var title = name +
+    var clientName = String((entry && entry.client_name) || '').trim();
+    var title = (clientName ? clientName + ' — ' : '') + name +
       (renamed ? ' (' + productName + ')' : '') +
       (status ? ' — ' + status : '') +
       (uid ? ' · ' + uid : '') +
