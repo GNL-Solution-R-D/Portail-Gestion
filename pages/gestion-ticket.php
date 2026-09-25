@@ -539,5 +539,7 @@ $searchPlaceholder = 'Rechercher (objet, client, référence…)';
     load();
   })();
   </script>
+  <!-- Dépliants de la barre latérale (dont « Client ») : cette page n'avait aucun contrôleur. -->
+  <script src="../assets/js/collapsible.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/js/collapsible.js') ?>" defer></script>
 </body>
 </html>

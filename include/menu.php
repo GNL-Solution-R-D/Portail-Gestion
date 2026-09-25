@@ -75,13 +75,86 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
 <div class="bg-background app-shell-offset-min-height flex h-full min-h-full w-full max-w-xs flex-col border shadow-sm dashboard-sidebar">
 <div class="px-6 pt-6"></div>
 <div class="flex-1 px-6 pb-6">
-<small class="text-muted-foreground mb-3 block text-xs font-bold tracking-wide uppercase">Techenique</small>
+<!-- ══════════════════════════════════════════════════════════════════
+     « Client » — repris de la nav « Mes services » du portail client
+     (Portail-Client-v2/include/menu.php). Les 5 dépliants sont masqués
+     par défaut et peuplés par assets/js/services_menu.js à partir de
+     data/services_menu_api.php ; une catégorie sans service reste masquée.
+══════════════════════════════════════════════════════════════════ -->
+<small class="text-muted-foreground mb-3 block text-xs font-bold tracking-wide uppercase">Client</small>
 <nav class="mb-4 space-y-0.5 border-b pb-4">
 <a class="text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center rounded-md px-2.5 py-2 transition-colors" href="./entreprises"><span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-users h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
 <span class="font-medium">Entreprises</span>
 </a>
-<div data-slot="collapsible" data-state="closed">
+<div data-slot="collapsible" data-state="closed" data-services-block hidden>
 <button aria-controls="sidebar-services-content" aria-expanded="false" class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors" data-slot="collapsible-trigger" data-state="closed" type="button">
+<span class="mr-2.5 grid shrink-0 place-items-center">
+  <svg class="lucide lucide-layout-grid h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+    <rect height="7" rx="1" width="7" x="3" y="3"></rect>
+    <rect height="7" rx="1" width="7" x="14" y="3"></rect>
+    <rect height="7" rx="1" width="7" x="14" y="14"></rect>
+    <rect height="7" rx="1" width="7" x="3" y="14"></rect>
+  </svg>
+</span>
+<span class="font-medium">Services WEB</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
+</button>
+<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-services-content">
+<div id="web-services-list" class="mt-1 space-y-1">
+<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10" data-services-loading>Chargement…</div>
+</div>
+</div>
+</div>
+<!-- ══════════════════════════════════════════════════════════════════
+     Catégories de services supplémentaires (même structure que
+     « Services WEB » : le JS générique [data-slot="collapsible-trigger"]
+     des pages les prend en charge automatiquement).
+     Chaque conteneur (id=*-list) est prêt à être peuplé côté client.
+══════════════════════════════════════════════════════════════════ -->
+<div data-slot="collapsible" data-state="closed" data-services-block hidden>
+<button aria-controls="sidebar-cloud-content" aria-expanded="false" class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors" data-slot="collapsible-trigger" data-state="closed" type="button">
+<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-cloud h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg></span><span class="font-medium">Services Cloud</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
+</button>
+<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-cloud-content">
+<div id="cloud-services-list" class="mt-1 space-y-1">
+<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Aucun service</div>
+</div>
+</div>
+</div>
+<div data-slot="collapsible" data-state="closed" data-services-block hidden>
+<button aria-controls="sidebar-specifiques-content" aria-expanded="false" class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors" data-slot="collapsible-trigger" data-state="closed" type="button">
+<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-settings-2 h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M20 7h-9"></path><path d="M14 17H5"></path><circle cx="17" cy="17" r="3"></circle><circle cx="7" cy="7" r="3"></circle></svg></span><span class="font-medium">Services Spécifiques</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
+</button>
+<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-specifiques-content">
+<div id="specific-services-list" class="mt-1 space-y-1">
+<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Aucun service</div>
+</div>
+</div>
+</div>
+<div data-slot="collapsible" data-state="closed" data-services-block hidden>
+<button aria-controls="sidebar-vps-content" aria-expanded="false" class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors" data-slot="collapsible-trigger" data-state="closed" type="button">
+<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-layers h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"></path><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"></path><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"></path></svg></span><span class="font-medium">Serveurs Virtualisés</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
+</button>
+<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-vps-content">
+<div id="virtual-servers-list" class="mt-1 space-y-1">
+<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Aucun service</div>
+</div>
+</div>
+</div>
+<div data-slot="collapsible" data-state="closed" data-services-block hidden>
+<button aria-controls="sidebar-dedicated-content" aria-expanded="false" class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors" data-slot="collapsible-trigger" data-state="closed" type="button">
+<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-server h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><rect height="8" rx="2" ry="2" width="20" x="2" y="2"></rect><rect height="8" rx="2" ry="2" width="20" x="2" y="14"></rect><line x1="6" x2="6.01" y1="6" y2="6"></line><line x1="6" x2="6.01" y1="18" y2="18"></line></svg></span><span class="font-medium">Serveurs Dédiés</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
+</button>
+<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-dedicated-content">
+<div id="dedicated-servers-list" class="mt-1 space-y-1">
+<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Aucun service</div>
+</div>
+</div>
+</div>
+</nav>
+<small class="text-muted-foreground mb-3 block text-xs font-bold tracking-wide uppercase">Techenique</small>
+<nav class="mb-4 space-y-0.5 border-b pb-4">
+<div data-slot="collapsible" data-state="closed">
+<button aria-controls="sidebar-gnl-services-content" aria-expanded="false" class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors" data-slot="collapsible-trigger" data-state="closed" type="button">
 <span class="mr-2.5 grid shrink-0 place-items-center">
   <svg class="lucide lucide-layout-grid h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
     <rect height="7" rx="1" width="7" x="3" y="3"></rect>
@@ -92,26 +165,7 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
 </span>
 <span class="font-medium">Les services GNL</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
 </button>
-<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-services-content">
-<div id="k8s-deployments" class="mt-1 space-y-1">
-<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10" data-deployments-loading>Chargement…</div>
-</div>
-</div>
-</div>
-
-<div data-slot="collapsible" data-state="closed">
-<button aria-controls="sidebar-services-content" aria-expanded="false" class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors" data-slot="collapsible-trigger" data-state="closed" type="button">
-<span class="mr-2.5 grid shrink-0 place-items-center">
-  <svg class="lucide lucide-layout-grid h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
-    <rect height="7" rx="1" width="7" x="3" y="3"></rect>
-    <rect height="7" rx="1" width="7" x="14" y="3"></rect>
-    <rect height="7" rx="1" width="7" x="14" y="14"></rect>
-    <rect height="7" rx="1" width="7" x="3" y="14"></rect>
-  </svg>
-</span>
-<span class="font-medium">Les services clients</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
-</button>
-<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-services-content">
+<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-gnl-services-content">
 <div id="k8s-deployments" class="mt-1 space-y-1">
 <div class="text-muted-foreground text-xs px-2.5 py-1 pl-10" data-deployments-loading>Chargement…</div>
 </div>
@@ -173,6 +227,9 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
 <small class="text-muted-foreground block text-center text-sm">GNL Solution</small>
 </div>
 </div>
+
+<!-- Dépliants « Client » : peuplés par assets/js/services_menu.js (garde anti double chargement). -->
+<script src="../assets/js/services_menu.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/assets/js/services_menu.js') ?>" defer></script>
 
 <!-- ══════════════════════════════════════════════════════════════════════════
      ASSISTANT « AJOUTER UN DOMAINE »
