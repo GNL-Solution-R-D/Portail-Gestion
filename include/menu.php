@@ -570,6 +570,13 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
 
       <div class="mt-4 space-y-4">
         <div>
+          <label for="dnsServerType" class="mb-1.5 block text-xs font-medium text-muted-foreground">Type *</label>
+          <select id="dnsServerType" name="type" required class="h-10 w-full rounded-md border bg-background px-3 text-sm">
+            <option value="interne" selected>Interne</option>
+            <option value="externe">Externe</option>
+          </select>
+        </div>
+        <div>
           <label for="dnsServerName" class="mb-1.5 block text-xs font-medium text-muted-foreground">Nom d'hôte (FQDN) *</label>
           <input id="dnsServerName" name="name" type="text" required autocomplete="off" spellcheck="false"
             class="h-10 w-full rounded-md border bg-background px-3 text-sm font-mono" placeholder="ns4.gnl-solution.fr" />
@@ -1128,12 +1135,14 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
         e.preventDefault();
         const fd = new FormData(form);
         const payload = {
+          type:        String(fd.get('type') || 'interne'),
           name:        String(fd.get('name') || '').trim().toLowerCase().replace(/\.$/, ''),
           ip:          String(fd.get('ip') || '').trim(),
           ipv6:        String(fd.get('ipv6') || '').trim(),
           role:        String(fd.get('role') || 'secondary'),
           description: String(fd.get('description') || '').trim(),
         };
+        if (payload.type !== 'interne' && payload.type !== 'externe') { setDnsStatus('Type invalide.', 'err'); return; }
         if (!FQDN_RE.test(payload.name)) { setDnsStatus('Nom d\'hôte invalide (ex. ns4.gnl-solution.fr).', 'err'); return; }
         if (!IPV4_RE.test(payload.ip))   { setDnsStatus('Adresse IPv4 invalide.', 'err'); return; }
         if (payload.ipv6 && payload.ipv6.indexOf(':') === -1) { setDnsStatus('Adresse IPv6 invalide.', 'err'); return; }
