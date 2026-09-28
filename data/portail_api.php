@@ -1841,6 +1841,26 @@ try {
     switch ($action) {
 
         // ─────────────────────────────────────────────────────────────────────
+        //  SERVEURS DNS (dépliant « Serveurs DNS » de la barre latérale)
+        //  n8n renvoie un tableau de lignes, ou { servers: [...] } /
+        //  { dns_servers: [...] }. Champs lus côté navigateur (le premier non
+        //  vide gagne) : name|hostname|server_name|fqdn|ns, ip|ip_address|
+        //  address|ipv4, status|state.
+        // ─────────────────────────────────────────────────────────────────────
+        case 'dns_server.list': {
+            $resp = n8n_call(['action' => 'dns_server.list', 'client_id' => $clientId]);
+            ensure_ok($resp);
+            send_json(200, [
+                'ok'      => true,
+                'servers' => extract_rows(
+                    $resp['json'],
+                    ['servers', 'dns_servers', 'dns'],
+                    ['id', 'name', 'hostname', 'server_name', 'fqdn', 'ns']
+                ),
+            ]);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
         //  DOMAINES
         // ─────────────────────────────────────────────────────────────────────
         case 'domain.list': {
