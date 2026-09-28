@@ -1861,17 +1861,21 @@ try {
         }
 
         // Ajout d'un serveur DNS (modal « Ajouter un serveur »).
-        // Payload n8n : { action, client_id, name, ip, ipv6, role, description }.
+        // Payload n8n : { action, client_id, type, name, ip, ipv6, role, description }.
         case 'dns_server.add': {
             require_post();
             csrf_check();
 
+            $type        = strtolower(trim((string)($_POST['type'] ?? '')));
             $name        = rtrim(strtolower(trim((string)($_POST['name'] ?? ''))), '.');
             $ip          = trim((string)($_POST['ip'] ?? ''));
             $ipv6        = trim((string)($_POST['ipv6'] ?? ''));
             $role        = strtolower(trim((string)($_POST['role'] ?? 'secondary')));
             $description = trim((string)($_POST['description'] ?? ''));
 
+            if (!in_array($type, ['interne', 'externe'], true)) {
+                send_json(400, ['ok' => false, 'error' => 'Type invalide (interne ou externe).']);
+            }
             if (!is_domain_name($name)) {
                 send_json(400, ['ok' => false, 'error' => 'Nom d\'hôte invalide.']);
             }
@@ -1891,6 +1895,7 @@ try {
             $resp = n8n_call([
                 'action'      => 'dns_server.add',
                 'client_id'   => $clientId,
+                'type'        => $type,
                 'name'        => $name,
                 'ip'          => $ip,
                 'ipv6'        => $ipv6,
