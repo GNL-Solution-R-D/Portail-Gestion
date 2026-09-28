@@ -166,7 +166,7 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
 <span class="font-medium">Les services GNL</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
 </button>
 <div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-gnl-services-content">
-<div id="k8s-deployments" class="mt-1 space-y-1">
+<div id="k8s-deployments" class="mt-1 space-y-1" data-gnl-services>
 <div class="text-muted-foreground text-xs px-2.5 py-1 pl-10" data-deployments-loading>Chargement…</div>
 </div>
 </div>
@@ -559,8 +559,10 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
   // Proxy PHP qui relaie vers le webhook n8n pour les renommages de déploiements.
   // Même contrat que domains_api.php : renvoie toujours { ok, error?, deployments?, row? }.
   const DEPLOYMENTS_API = '../data/portail_api.php';
-  // Noms techniques des déploiements (source : Kubernetes, fournis côté PHP).
-  const DEPLOYMENTS = <?php echo json_encode(array_values($menu_deployments), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+  // « Les services GNL » : noms techniques des deployments du namespace
+  // « webintern » (source : Kubernetes, fournis côté PHP).
+  const DEPLOYMENTS = <?php echo json_encode(array_values($gnl_services_deployments), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+  const DEPLOYMENTS_ERROR = <?php echo json_encode($gnl_services_error, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
   // Cible des liens « domaine » dans la barre latérale (section Zone DNS).
   // Page Zone DNS : /zdns?domain=<domain_buy_name>.
   const DNS_ZONE_HREF = (name) => './zdns?domain=' + encodeURIComponent(name);
@@ -1091,6 +1093,10 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
       const list = document.getElementById('k8s-deployments');
       if (!list) return;
       const arr = (names || []).map(String).filter(n => n.trim() !== '');
+      if (arr.length === 0 && DEPLOYMENTS_ERROR) {
+        list.innerHTML = '<div class="text-red-600 text-xs px-2.5 py-1 pl-10">' + escHtml(DEPLOYMENTS_ERROR) + '</div>';
+        return;
+      }
       if (arr.length === 0) {
         list.innerHTML = '<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Aucun déploiement</div>';
         return;
