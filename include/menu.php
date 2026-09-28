@@ -57,6 +57,37 @@ $menu_deployments = array_values(array_filter(
     static fn ($n) => $n !== ''
 ));
 
+// ── « Les services GNL » : deployments du namespace interne « webintern » ─────
+//  Indépendant du namespace de la session : le dépliant liste TOUJOURS les
+//  deployments de ce namespace fixe. ($menu_deployments, lui, reste utilisé par
+//  l'assistant « rattacher un domaine ».)
+$gnl_services_namespace   = 'webintern';
+$gnl_services_deployments = [];
+$gnl_services_error       = '';
+
+$gnlK8sClientPath = dirname(__DIR__) . '/data/KubernetesClient.php';
+if (is_readable($gnlK8sClientPath)) {
+    require_once $gnlK8sClientPath;
+    try {
+        $gnlK8s   = new KubernetesClient(null, null, null, 3);
+        $gnlList  = $gnlK8s->listDeployments($gnl_services_namespace);
+        $gnlItems = is_array($gnlList['items'] ?? null) ? $gnlList['items'] : [];
+        foreach ($gnlItems as $gnlItem) {
+            $gnlName = (string)($gnlItem['metadata']['name'] ?? '');
+            if ($gnlName !== '') $gnl_services_deployments[] = $gnlName;
+        }
+        sort($gnl_services_deployments, SORT_NATURAL | SORT_FLAG_CASE);
+        $gnl_services_deployments = array_values(array_unique($gnl_services_deployments));
+    } catch (Throwable $e) {
+        error_log('[menu] K8s deployments (' . $gnl_services_namespace . '): ' . $e->getMessage());
+        $gnl_services_deployments = [];
+        $gnl_services_error = 'Kubernetes indisponible (namespace ' . $gnl_services_namespace . ').';
+    }
+    unset($gnlK8s, $gnlList, $gnlItems, $gnlItem, $gnlName);
+} else {
+    $gnl_services_error = 'KubernetesClient.php introuvable.';
+}
+
 // ── Jeton CSRF (réutilise celui de la session si présent) ─────────────────────
 if (empty($_SESSION['csrf']) || !is_string($_SESSION['csrf'])) {
     try {
@@ -177,9 +208,9 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
 <span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-layout-grid h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><rect height="7" rx="1" width="7" x="3" y="3"></rect><rect height="7" rx="1" width="7" x="14" y="3"></rect><rect height="7" rx="1" width="7" x="14" y="14"></rect><rect height="7" rx="1" width="7" x="3" y="14"></rect></svg></span><span class="font-medium">Serveurs DNS</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
 </button>
 <div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-dns-content">
-<!-- Liste des domaines (domain_buy_name) — peuplée UNIQUEMENT depuis la table n8n
-     via le proxy (action=domain.list, GET). Pas de repli Ingress/PowerDNS. -->
-<div id="dns-domains-list" class="space-y-0.5">
+<!-- Liste des serveurs DNS — peuplée depuis n8n via le proxy
+     (action=dns_server.list, GET). -->
+<div id="dns-servers-list" class="space-y-0.5">
 <div class="text-muted-foreground text-xs px-2.5 py-1 pl-10" data-dns-loading>Chargement…</div>
 </div>
 <!-- ══════════════════════════════════════════════════════════════════════
@@ -941,6 +972,70 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
       updateNext();
     }
 
+    // ── « Serveurs DNS » : liste des serveurs DNS lue depuis n8n ──────────────
+    const DNS_SERVER_ICON =
+      '<svg class="lucide lucide-server h-5 w-5" fill="none" height="24" stroke="currentColor" ' +
+      'stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" ' +
+      'xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+      '<rect height="8" rx="2" ry="2" width="20" x="2" y="2"></rect><rect height="8" rx="2" ry="2" width="20" x="2" y="14"></rect>' +
+      '<line x1="6" x2="6.01" y1="6" y2="6"></line><line x1="6" x2="6.01" y1="18" y2="18"></line></svg>';
+
+    // Première valeur non vide parmi plusieurs noms de colonnes possibles.
+    const pickField = (row, keys) => {
+      for (const k of keys) {
+        const v = row && row[k];
+        if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+      }
+      return '';
+    };
+
+    function renderSidebarDnsServers(rows, errorMsg) {
+      const list = document.getElementById('dns-servers-list');
+      if (!list) return;
+      if (errorMsg) {
+        list.innerHTML = '<div class="text-red-600 text-xs px-2.5 py-1 pl-10">Serveurs DNS : ' + escHtml(errorMsg) + '</div>';
+        return;
+      }
+      const seen = new Set();
+      const servers = [];
+      (rows || []).forEach(r => {
+        const name = pickField(r, ['name', 'hostname', 'server_name', 'fqdn', 'ns']);
+        if (!name || seen.has(name.toLowerCase())) return;
+        seen.add(name.toLowerCase());
+        servers.push({
+          name,
+          ip: pickField(r, ['ip', 'ip_address', 'address', 'ipv4']),
+          status: pickField(r, ['status', 'state']),
+        });
+      });
+      if (servers.length === 0) {
+        list.innerHTML = '<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Aucun serveur DNS</div>';
+        return;
+      }
+      servers.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+      list.innerHTML = servers.map(s => {
+        const title = s.name + (s.ip ? ' — ' + s.ip : '') + (s.status ? ' — ' + s.status : '');
+        const badge = s.status
+          ? '<span class="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium bg-secondary text-muted-foreground">' + escHtml(s.status) + '</span>'
+          : (s.ip ? '<span class="ml-auto shrink-0 text-[10px] text-muted-foreground font-mono">' + escHtml(s.ip) + '</span>' : '');
+        return '<div data-dns-server="' + escHtml(s.name) + '" title="' + escHtml(title) + '" ' +
+          'class="text-muted-foreground flex w-full items-center gap-2 rounded-md px-2.5 py-2 pl-10 text-sm">' +
+          '<span class="mr-0.5 grid shrink-0 place-items-center">' + DNS_SERVER_ICON + '</span>' +
+          '<span class="font-medium truncate min-w-0">' + escHtml(s.name) + '</span>' + badge +
+          '</div>';
+      }).join('');
+    }
+
+    async function refreshDnsServers() {
+      try {
+        const data = await apiCall('dns_server.list', {}, 'GET');
+        renderSidebarDnsServers(Array.isArray(data.servers) ? data.servers : [], '');
+      } catch (e) {
+        console.warn('[serveurs DNS] lecture n8n impossible :', e && e.message ? e.message : e);
+        renderSidebarDnsServers([], e && e.message ? e.message : String(e));
+      }
+    }
+
     // Une seule lecture de la table → alimente la barre latérale ET le dépliant.
     async function refreshDomains() {
       try {
@@ -1225,7 +1320,8 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
 
     // état initial
     reset();
-    refreshDomains();      // peuple la barre latérale au chargement de la page
+    refreshDomains();      // peuple le dépliant de l'assistant (domaines achetés)
+    refreshDnsServers();   // peuple « Serveurs DNS » depuis n8n (dns_server.list)
     refreshDeployments();  // peuple « Mes services » + applique les renommages n8n
   });
 })();
