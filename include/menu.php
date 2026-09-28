@@ -521,6 +521,36 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
   </button>
 </div>
 
+<!-- Menu contextuel (clic droit) sur un serveur de « Serveurs DNS » -->
+<div id="dnsServerContextMenu" class="hidden fixed z-[60] min-w-[11rem] overflow-hidden rounded-md border bg-card text-card-foreground shadow-lg py-1" role="menu" style="top:0;left:0;">
+  <button type="button" data-dns-server-delete role="menuitem"
+    class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-600 hover:bg-secondary">
+    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6h14M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+    </svg>
+    Supprimer
+  </button>
+</div>
+
+<!-- Confirmation de suppression d'un serveur DNS -->
+<div id="deleteDnsServerModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+     role="dialog" aria-modal="true" aria-labelledby="deleteDnsServerTitle">
+  <div class="w-full max-w-md rounded-xl border bg-card text-card-foreground shadow-lg">
+    <div class="p-6">
+      <h2 id="deleteDnsServerTitle" class="text-lg font-semibold">Supprimer le serveur DNS</h2>
+      <p class="mt-2 text-sm text-muted-foreground">Voulez-vous vraiment supprimer
+        <span class="font-mono font-medium text-foreground" data-delete-dns-server-name></span> ? Cette action est irréversible.</p>
+      <div data-delete-dns-server-status class="mt-3 text-xs"></div>
+      <div class="mt-6 flex justify-end gap-2">
+        <button type="button" data-delete-dns-server-cancel
+          class="inline-flex h-9 items-center justify-center rounded-md border px-3 text-sm font-medium transition-all hover:bg-secondary">Annuler</button>
+        <button type="button" data-delete-dns-server-confirm
+          class="inline-flex h-9 items-center justify-center rounded-md bg-red-600 px-3 text-sm font-medium text-white transition-all hover:bg-red-700 disabled:opacity-50">Supprimer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Menu contextuel (clic droit) sur un déploiement du sous-menu « Mes services » -->
 <div id="deploymentContextMenu" class="hidden fixed z-[60] min-w-[11rem] overflow-hidden rounded-md border bg-card text-card-foreground shadow-lg py-1" role="menu" style="top:0;left:0;">
   <button type="button" data-deployment-rename role="menuitem"
@@ -1063,6 +1093,7 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
         seen.add(name.toLowerCase());
         servers.push({
           name,
+          id: pickField(r, ['id', 'rowid', 'uid']),
           ip: pickField(r, ['ip', 'ip_address', 'address', 'ipv4']),
           status: pickField(r, ['status', 'state']),
         });
@@ -1077,13 +1108,88 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
         const badge = s.status
           ? '<span class="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium bg-secondary text-muted-foreground">' + escHtml(s.status) + '</span>'
           : (s.ip ? '<span class="ml-auto shrink-0 text-[10px] text-muted-foreground font-mono">' + escHtml(s.ip) + '</span>' : '');
-        return '<div data-dns-server="' + escHtml(s.name) + '" title="' + escHtml(title) + '" ' +
+        return '<div data-dns-server="' + escHtml(s.name) + '" data-dns-server-id="' + escHtml(s.id) + '" title="' + escHtml(title) + '" ' +
           'class="text-muted-foreground flex w-full items-center gap-2 rounded-md px-2.5 py-2 pl-10 text-sm">' +
           '<span class="mr-0.5 grid shrink-0 place-items-center">' + DNS_SERVER_ICON + '</span>' +
           '<span class="font-medium truncate min-w-0">' + escHtml(s.name) + '</span>' + badge +
           '</div>';
       }).join('');
     }
+
+    // ── Clic droit sur un serveur DNS → « Supprimer » → confirmation → n8n ─────
+    (function wireDeleteDnsServer() {
+      const list    = document.getElementById('dns-servers-list');
+      const menu    = document.getElementById('dnsServerContextMenu');
+      const confirm = document.getElementById('deleteDnsServerModal');
+      if (!list || !menu || !confirm) return;
+
+      const nameEl   = confirm.querySelector('[data-delete-dns-server-name]');
+      const statusEl = confirm.querySelector('[data-delete-dns-server-status]');
+      const okBtn    = confirm.querySelector('[data-delete-dns-server-confirm]');
+
+      function hideMenu() { menu.classList.add('hidden'); }
+      function showMenu(x, y, name, id) {
+        menu.dataset.name = name || '';
+        menu.dataset.id   = id || '';
+        menu.classList.remove('hidden');
+        const r = menu.getBoundingClientRect();
+        menu.style.left = Math.max(8, Math.min(x, window.innerWidth  - r.width  - 8)) + 'px';
+        menu.style.top  = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + 'px';
+      }
+      function openConfirm(name, id) {
+        if (!name) return;
+        confirm.dataset.name = name;
+        confirm.dataset.id   = id || '';
+        if (nameEl) nameEl.textContent = name;
+        if (statusEl) { statusEl.textContent = ''; statusEl.className = 'mt-3 text-xs'; }
+        confirm.classList.remove('hidden'); confirm.classList.add('flex');
+      }
+      function closeConfirm() {
+        confirm.classList.remove('flex'); confirm.classList.add('hidden');
+        confirm.dataset.name = ''; confirm.dataset.id = '';
+      }
+
+      // Délégation : la liste est régénérée à chaque lecture n8n.
+      list.addEventListener('contextmenu', (e) => {
+        const el = e.target.closest('[data-dns-server]');
+        if (!el) return;                 // clic droit sur du vide → menu navigateur
+        e.preventDefault();
+        e.stopPropagation();             // sinon le handler global referme aussitôt
+        showMenu(e.clientX, e.clientY, el.getAttribute('data-dns-server'), el.getAttribute('data-dns-server-id'));
+      });
+      document.addEventListener('click', hideMenu);
+      document.addEventListener('contextmenu', hideMenu);
+      window.addEventListener('scroll', hideMenu, true);
+      window.addEventListener('resize', hideMenu);
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideMenu(); });
+
+      const delItem = menu.querySelector('[data-dns-server-delete]');
+      delItem && delItem.addEventListener('click', () => {
+        const name = menu.dataset.name || '', id = menu.dataset.id || '';
+        hideMenu();
+        openConfirm(name, id);
+      });
+
+      confirm.querySelectorAll('[data-delete-dns-server-cancel]').forEach(b => b.addEventListener('click', closeConfirm));
+      confirm.addEventListener('click', (e) => { if (e.target === confirm) closeConfirm(); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && confirm.classList.contains('flex')) closeConfirm(); });
+
+      okBtn && okBtn.addEventListener('click', async () => {
+        const name = confirm.dataset.name || '';
+        if (!name) return;
+        okBtn.disabled = true;
+        if (statusEl) { statusEl.textContent = 'Suppression…'; statusEl.className = 'mt-3 text-xs text-muted-foreground'; }
+        try {
+          await apiCall('dns_server.delete', { name, id: confirm.dataset.id || '' }, 'POST');
+          closeConfirm();
+          refreshDnsServers(); // relit la liste depuis n8n
+        } catch (err) {
+          if (statusEl) { statusEl.textContent = 'Erreur : ' + (err && err.message ? err.message : String(err)); statusEl.className = 'mt-3 text-xs text-red-600'; }
+        } finally {
+          okBtn.disabled = false;
+        }
+      });
+    })();
 
     async function refreshDnsServers() {
       try {
