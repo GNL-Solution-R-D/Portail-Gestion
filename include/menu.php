@@ -216,7 +216,7 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
 <!-- ══════════════════════════════════════════════════════════════════════
      « Ajouter un Domaine » — ouvre l'assistant (modal). Toujours visible.
 ══════════════════════════════════════════════════════════════════════ -->
-<button type="button" data-add-domain-open class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors text-left">
+<button type="button" data-add-dns-server-open class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors text-left">
 <span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-package h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><polyline points="3.29 7 12 12 20.71 7"></polyline><path d="m7.5 4.27 9 5.15"></path></svg></span>
 <span class="text-sm truncate">Ajouter un serveur</span>
 </button>
@@ -554,6 +554,58 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
           class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-all hover:opacity-90 disabled:opacity-50">Enregistrer</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     « AJOUTER UN SERVEUR » (dépliant « Serveurs DNS »)
+     Crée une entrée dans n8n via le proxy : action=dns_server.add (POST).
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="addDnsServerModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+     role="dialog" aria-modal="true" aria-labelledby="addDnsServerTitle">
+  <div class="w-full max-w-md rounded-xl border bg-card text-card-foreground shadow-lg max-h-[90vh] overflow-y-auto">
+    <form class="p-6" data-dns-server-form novalidate>
+      <h2 id="addDnsServerTitle" class="text-lg font-semibold">Ajouter un serveur DNS</h2>
+      <p class="mt-1 text-sm text-muted-foreground">Le serveur est enregistré dans n8n puis apparaît dans « Serveurs DNS ».</p>
+
+      <div class="mt-4 space-y-4">
+        <div>
+          <label for="dnsServerName" class="mb-1.5 block text-xs font-medium text-muted-foreground">Nom d'hôte (FQDN) *</label>
+          <input id="dnsServerName" name="name" type="text" required autocomplete="off" spellcheck="false"
+            class="h-10 w-full rounded-md border bg-background px-3 text-sm font-mono" placeholder="ns4.gnl-solution.fr" />
+        </div>
+        <div>
+          <label for="dnsServerIp" class="mb-1.5 block text-xs font-medium text-muted-foreground">Adresse IPv4 *</label>
+          <input id="dnsServerIp" name="ip" type="text" required autocomplete="off" spellcheck="false" inputmode="decimal"
+            class="h-10 w-full rounded-md border bg-background px-3 text-sm font-mono" placeholder="203.0.113.53" />
+        </div>
+        <div>
+          <label for="dnsServerIpv6" class="mb-1.5 block text-xs font-medium text-muted-foreground">Adresse IPv6 (facultatif)</label>
+          <input id="dnsServerIpv6" name="ipv6" type="text" autocomplete="off" spellcheck="false"
+            class="h-10 w-full rounded-md border bg-background px-3 text-sm font-mono" placeholder="2001:db8::53" />
+        </div>
+        <div>
+          <label for="dnsServerRole" class="mb-1.5 block text-xs font-medium text-muted-foreground">Rôle</label>
+          <select id="dnsServerRole" name="role" class="h-10 w-full rounded-md border bg-background px-3 text-sm">
+            <option value="primary">Primaire (maître)</option>
+            <option value="secondary" selected>Secondaire (esclave)</option>
+          </select>
+        </div>
+        <div>
+          <label for="dnsServerDescription" class="mb-1.5 block text-xs font-medium text-muted-foreground">Description (facultatif)</label>
+          <input id="dnsServerDescription" name="description" type="text" maxlength="255" autocomplete="off"
+            class="h-10 w-full rounded-md border bg-background px-3 text-sm" placeholder="Serveur secondaire — datacenter Paris" />
+        </div>
+      </div>
+
+      <div data-dns-server-status class="mt-3 text-xs"></div>
+      <div class="mt-6 flex justify-end gap-2">
+        <button type="button" data-dns-server-cancel
+          class="inline-flex h-9 items-center justify-center rounded-md border px-3 text-sm font-medium transition-all hover:bg-secondary">Annuler</button>
+        <button type="submit" data-dns-server-submit
+          class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-all hover:opacity-90 disabled:opacity-50">Ajouter</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -1035,6 +1087,71 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
         renderSidebarDnsServers([], e && e.message ? e.message : String(e));
       }
     }
+
+    // ── Modal « Ajouter un serveur » → dns_server.add (n8n) ─────────────────────
+    (function wireAddDnsServer() {
+      const dnsModal = document.getElementById('addDnsServerModal');
+      if (!dnsModal) return;
+      const form     = dnsModal.querySelector('[data-dns-server-form]');
+      const statusEl = dnsModal.querySelector('[data-dns-server-status]');
+      const submit   = dnsModal.querySelector('[data-dns-server-submit]');
+
+      const FQDN_RE = /^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/i;
+      const IPV4_RE = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+
+      function setDnsStatus(text, kind) {
+        if (!statusEl) return;
+        statusEl.textContent = text || '';
+        statusEl.className = 'mt-3 text-xs ' +
+          (kind === 'err' ? 'text-red-600' : kind === 'ok' ? 'text-emerald-600' : 'text-muted-foreground');
+      }
+      function openDnsModal() {
+        if (form) form.reset();
+        setDnsStatus('');
+        dnsModal.classList.remove('hidden'); dnsModal.classList.add('flex');
+        const first = dnsModal.querySelector('#dnsServerName');
+        if (first) requestAnimationFrame(() => first.focus());
+      }
+      function closeDnsModal() {
+        dnsModal.classList.remove('flex'); dnsModal.classList.add('hidden');
+      }
+
+      document.querySelectorAll('[data-add-dns-server-open]').forEach(b => b.addEventListener('click', (e) => {
+        e.preventDefault();
+        openDnsModal();
+      }));
+      dnsModal.querySelectorAll('[data-dns-server-cancel]').forEach(b => b.addEventListener('click', closeDnsModal));
+      dnsModal.addEventListener('click', (e) => { if (e.target === dnsModal) closeDnsModal(); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dnsModal.classList.contains('flex')) closeDnsModal(); });
+
+      form && form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(form);
+        const payload = {
+          name:        String(fd.get('name') || '').trim().toLowerCase().replace(/\.$/, ''),
+          ip:          String(fd.get('ip') || '').trim(),
+          ipv6:        String(fd.get('ipv6') || '').trim(),
+          role:        String(fd.get('role') || 'secondary'),
+          description: String(fd.get('description') || '').trim(),
+        };
+        if (!FQDN_RE.test(payload.name)) { setDnsStatus('Nom d\'hôte invalide (ex. ns4.gnl-solution.fr).', 'err'); return; }
+        if (!IPV4_RE.test(payload.ip))   { setDnsStatus('Adresse IPv4 invalide.', 'err'); return; }
+        if (payload.ipv6 && payload.ipv6.indexOf(':') === -1) { setDnsStatus('Adresse IPv6 invalide.', 'err'); return; }
+
+        if (submit) submit.disabled = true;
+        setDnsStatus('Enregistrement…');
+        try {
+          await apiCall('dns_server.add', payload, 'POST');
+          setDnsStatus('Serveur ajouté.', 'ok');
+          closeDnsModal();
+          refreshDnsServers(); // relit la liste depuis n8n
+        } catch (err) {
+          setDnsStatus('Erreur : ' + (err && err.message ? err.message : String(err)), 'err');
+        } finally {
+          if (submit) submit.disabled = false;
+        }
+      });
+    })();
 
     // Une seule lecture de la table → alimente la barre latérale ET le dépliant.
     async function refreshDomains() {
