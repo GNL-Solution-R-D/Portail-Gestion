@@ -1860,6 +1860,53 @@ try {
             ]);
         }
 
+        // Ajout d'un serveur DNS (modal « Ajouter un serveur »).
+        // Payload n8n : { action, client_id, name, ip, ipv6, role, description }.
+        case 'dns_server.add': {
+            require_post();
+            csrf_check();
+
+            $name        = rtrim(strtolower(trim((string)($_POST['name'] ?? ''))), '.');
+            $ip          = trim((string)($_POST['ip'] ?? ''));
+            $ipv6        = trim((string)($_POST['ipv6'] ?? ''));
+            $role        = strtolower(trim((string)($_POST['role'] ?? 'secondary')));
+            $description = trim((string)($_POST['description'] ?? ''));
+
+            if (!is_domain_name($name)) {
+                send_json(400, ['ok' => false, 'error' => 'Nom d\'hôte invalide.']);
+            }
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+                send_json(400, ['ok' => false, 'error' => 'Adresse IPv4 invalide.']);
+            }
+            if ($ipv6 !== '' && filter_var($ipv6, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) === false) {
+                send_json(400, ['ok' => false, 'error' => 'Adresse IPv6 invalide.']);
+            }
+            if (!in_array($role, ['primary', 'secondary'], true)) {
+                send_json(400, ['ok' => false, 'error' => 'Rôle invalide.']);
+            }
+            if (mb_strlen($description) > 255) {
+                send_json(400, ['ok' => false, 'error' => 'Description trop longue (255 caractères max).']);
+            }
+
+            $resp = n8n_call([
+                'action'      => 'dns_server.add',
+                'client_id'   => $clientId,
+                'name'        => $name,
+                'ip'          => $ip,
+                'ipv6'        => $ipv6,
+                'role'        => $role,
+                'description' => $description,
+            ]);
+            ensure_ok($resp);
+
+            $rows = extract_rows($resp['json'], ['servers', 'dns_servers', 'dns'], ['id', 'name']);
+            $out  = ['ok' => true, 'action' => $action];
+            if (isset($rows[0])) {
+                $out['row'] = $rows[0];
+            }
+            send_json(200, $out);
+        }
+
         // ─────────────────────────────────────────────────────────────────────
         //  DOMAINES
         // ─────────────────────────────────────────────────────────────────────
