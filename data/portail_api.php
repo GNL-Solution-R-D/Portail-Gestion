@@ -1860,6 +1860,33 @@ try {
             ]);
         }
 
+        // Suppression d'un serveur DNS (clic droit → Supprimer).
+        // Payload n8n : { action, client_id, id, name } — id peut être vide si
+        // dns_server.list n'en renvoie pas : n8n retrouve alors la ligne par name.
+        case 'dns_server.delete': {
+            require_post();
+            csrf_check();
+
+            $name = rtrim(strtolower(trim((string)($_POST['name'] ?? ''))), '.');
+            $id   = trim((string)($_POST['id'] ?? ''));
+
+            if (!is_domain_name($name)) {
+                send_json(400, ['ok' => false, 'error' => 'Nom de serveur invalide.']);
+            }
+            if ($id !== '' && !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id)) {
+                send_json(400, ['ok' => false, 'error' => 'Identifiant de serveur invalide.']);
+            }
+
+            $resp = n8n_call([
+                'action'    => 'dns_server.delete',
+                'client_id' => $clientId,
+                'id'        => $id,
+                'name'      => $name,
+            ]);
+            ensure_ok($resp);
+            send_json(200, ['ok' => true, 'action' => $action]);
+        }
+
         // Ajout d'un serveur DNS (modal « Ajouter un serveur »).
         // Payload n8n : { action, client_id, type, name, ip, ipv6, role, description }.
         case 'dns_server.add': {
