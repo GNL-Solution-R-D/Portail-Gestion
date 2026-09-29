@@ -109,6 +109,14 @@ $searchPlaceholder = t('Rechercher une entreprise…');
 
     .org-links{display:flex;align-items:center;gap:.35rem;}
     .org-link{display:grid;place-items:center;width:2rem;height:2rem;border-radius:.5rem;border:1px solid rgba(148,163,184,.35);color:inherit;opacity:.7;transition:opacity 120ms ease, background-color 120ms ease;}
+    button.org-link{background:none;padding:0;font:inherit;cursor:pointer;}
+    .member-eye{display:grid;place-items:center;width:2rem;height:2rem;flex:none;margin-left:.25rem;border-radius:.5rem;border:1px solid rgba(148,163,184,.35);background:none;padding:0;color:inherit;opacity:.7;cursor:pointer;transition:opacity 120ms ease, background-color 120ms ease;}
+    .member-eye:hover{opacity:1;background:color-mix(in srgb, currentColor 8%, transparent);}
+    @media (prefers-reduced-motion: reduce){ .member-eye{transition:none;} }
+    .tm-dl{display:grid;grid-template-columns:max-content 1fr;gap:.55rem 1rem;font-size:.875rem;margin:0;}
+    .tm-dl dt{color:var(--muted-foreground,#64748b);}
+    .tm-dl dd{margin:0;word-break:break-word;}
+    .tm-field input[readonly]{opacity:.6;cursor:not-allowed;}
     .org-link:hover{opacity:1;background:color-mix(in srgb, currentColor 8%, transparent);}
     @media (prefers-reduced-motion: reduce){ .org-link{transition:none;} }
 
@@ -192,7 +200,7 @@ $searchPlaceholder = t('Rechercher une entreprise…');
     <div class="tm-dialog">
       <form id="orgAddForm" class="p-6" novalidate>
         <h2 id="orgAddTitle" class="text-lg font-semibold"><?= t('Ajouter une entreprise') ?></h2>
-        <p class="text-sm text-muted-foreground mt-1"><?= t('Crée une nouvelle organisation dans l’espace client.') ?></p>
+        <p id="orgAddSub" class="text-sm text-muted-foreground mt-1"><?= t('Crée une nouvelle organisation dans l’espace client.') ?></p>
 
         <div class="tm-grid mt-5">
           <div class="tm-field">
@@ -242,7 +250,7 @@ $searchPlaceholder = t('Rechercher une entreprise…');
           <div class="tm-field">
             <label for="orgAlias"><?= t('Alias') ?></label>
             <input type="text" id="orgAlias" name="alias" maxlength="255" autocomplete="off">
-            <p class="tm-hint"><?= t('Facultatif — déduit du nom si vide.') ?></p>
+            <p id="orgAliasHint" class="tm-hint"><?= t('Facultatif — déduit du nom si vide.') ?></p>
           </div>
           <div class="tm-field tm-span">
             <label for="orgDomains"><?= t('Domaines') ?></label>
@@ -298,6 +306,25 @@ $searchPlaceholder = t('Rechercher une entreprise…');
     </div>
   </div>
 
+  <!-- Modale : fiche d'un membre (lecture seule) -->
+  <div id="memberViewModal" class="tm-modal" role="dialog" aria-modal="true" aria-labelledby="memberViewTitle">
+    <div class="tm-dialog" style="max-width:30rem">
+      <div class="p-6">
+        <div class="flex items-center gap-3">
+          <span id="memberViewAv" class="member-av" style="width:2.5rem;height:2.5rem;font-size:.85rem"></span>
+          <div class="min-w-0">
+            <h2 id="memberViewTitle" class="text-lg font-semibold"></h2>
+            <p id="memberViewSub" class="text-sm text-muted-foreground"></p>
+          </div>
+        </div>
+        <dl id="memberViewList" class="tm-dl mt-5"></dl>
+        <div class="mt-6 flex justify-end">
+          <button type="button" class="tm-btn" data-close><?= t('Fermer') ?></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Entreprises : organisations Keycloak de l'espace client via
        data/portail_api.php ?action=org.list (include/keycloak_esp_client.php
        → Admin REST du realm ESP-CLI). Lecture seule.
@@ -315,6 +342,20 @@ $searchPlaceholder = t('Rechercher une entreprise…');
       creating:    <?= json_encode(t('Création…'), JSON_UNESCAPED_UNICODE) ?>,
       created:     <?= json_encode(t('Entreprise créée.'), JSON_UNESCAPED_UNICODE) ?>,
       addMember:   <?= json_encode(t('Ajouter un membre'), JSON_UNESCAPED_UNICODE) ?>,
+      editOrg:     <?= json_encode(t('Modifier l’entreprise'), JSON_UNESCAPED_UNICODE) ?>,
+      editSub:     <?= json_encode(t('Les modifications sont enregistrées dans Keycloak.'), JSON_UNESCAPED_UNICODE) ?>,
+      editSave:    <?= json_encode(t('Enregistrer'), JSON_UNESCAPED_UNICODE) ?>,
+      saving:      <?= json_encode(t('Enregistrement…'), JSON_UNESCAPED_UNICODE) ?>,
+      updateErr:   <?= json_encode(t('Impossible de modifier l’entreprise.'), JSON_UNESCAPED_UNICODE) ?>,
+      aliasLocked: <?= json_encode(t('L’alias ne peut pas être modifié après la création.'), JSON_UNESCAPED_UNICODE) ?>,
+      viewMember:  <?= json_encode(t('Voir le membre'), JSON_UNESCAPED_UNICODE) ?>,
+      fEmail:      <?= json_encode(t('E-mail'), JSON_UNESCAPED_UNICODE) ?>,
+      fUsername:   <?= json_encode(t('Identifiant'), JSON_UNESCAPED_UNICODE) ?>,
+      fFunction:   <?= json_encode(t('Fonction'), JSON_UNESCAPED_UNICODE) ?>,
+      fStatus:     <?= json_encode(t('Statut'), JSON_UNESCAPED_UNICODE) ?>,
+      fMembership: <?= json_encode(t('Rattachement'), JSON_UNESCAPED_UNICODE) ?>,
+      fOrg:        <?= json_encode(t('Entreprise'), JSON_UNESCAPED_UNICODE) ?>,
+      fId:         <?= json_encode(t('ID Keycloak'), JSON_UNESCAPED_UNICODE) ?>,
       emailInvalid:<?= json_encode(t('Adresse e-mail invalide.'), JSON_UNESCAPED_UNICODE) ?>,
       inviting:    <?= json_encode(t('Envoi…'), JSON_UNESCAPED_UNICODE) ?>,
       inviteErr:   <?= json_encode(t('Impossible d’envoyer l’invitation.'), JSON_UNESCAPED_UNICODE) ?>,
@@ -357,7 +398,7 @@ $searchPlaceholder = t('Rechercher une entreprise…');
 
       // membersCache : org_id -> 'loading' | html. Un dépliage ne rappelle
       // jamais Keycloak pour une organisation déjà chargée.
-      var state  = { orgs: [], truncated: false, issuer: '', membersCache: {} };
+      var state  = { orgs: [], truncated: false, issuer: '', membersCache: {}, membersData: {} };
       var suffix = counter ? (counter.getAttribute('data-suffix') || '') : '';
 
       function setCounter(n){ if (counter) counter.textContent = (n==null?'…':n) + (suffix ? ' ' + suffix : ''); }
@@ -390,6 +431,8 @@ $searchPlaceholder = t('Rechercher une entreprise…');
       var ICONS = {
         invoice: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>',
         order:   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+        edit:    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>',
+        eye:     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>',
         sub:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>'
       };
 
@@ -438,6 +481,8 @@ $searchPlaceholder = t('Rechercher une entreprise…');
             shortcut('facture',     o.id, ICONS.invoice, I18N.goInvoices || 'Factures') +
             shortcut('commande',    o.id, ICONS.order,   I18N.goOrders   || 'Commandes') +
             shortcut('abonnements', o.id, ICONS.sub,     I18N.goSubs     || 'Abonnements') +
+            '<button type="button" class="org-link" data-edit-org="' + esc(o.id) + '"' +
+              ' title="' + esc(I18N.editOrg || 'Modifier') + '" aria-label="' + esc(I18N.editOrg || 'Modifier') + '">' + ICONS.edit + '</button>' +
           '</div></td>' +
         '</tr>' +
         '<tr class="org-members" data-org-members="' + esc(o.id) + '" hidden>' +
@@ -499,13 +544,16 @@ $searchPlaceholder = t('Rechercher une entreprise…');
         }
       }
 
-      function memberHtml(m){
+      function memberHtml(m, orgId, idx){
+        var label = (I18N.viewMember || 'Voir le membre') + ' — ' + (m.name || '');
         return '<div class="member-line">' +
           '<span class="member-av">' + esc(m.initials) + '</span>' +
           '<span class="member-main"><b>' + esc(m.name) + '</b><span>' + esc(m.secondary) + '</span></span>' +
           '<span class="member-meta">' + esc(m.function || I18N.noFunction || '') +
             '<br>' + esc(m.status_label) + ' · ' + esc(m.membership) +
           '</span>' +
+          '<button type="button" class="member-eye" data-view-member="' + esc(orgId) + '" data-member-idx="' + idx + '"' +
+            ' title="' + esc(label) + '" aria-label="' + esc(label) + '">' + ICONS.eye + '</button>' +
         '</div>';
       }
 
@@ -542,8 +590,9 @@ $searchPlaceholder = t('Rechercher une entreprise…');
             delete state.membersCache[orgId];
           } else {
             var list = Array.isArray(data.members) ? data.members : [];
+            state.membersData[orgId] = list;
             html = list.length
-              ? list.map(memberHtml).join('') +
+              ? list.map(function (m, i){ return memberHtml(m, orgId, i); }).join('') +
                 (data.truncated ? '<p class="text-sm text-muted-foreground" style="margin-top:.6rem">' + esc(I18N.membersMore || '') + '</p>' : '')
               : '<p class="text-sm text-muted-foreground">' + esc(I18N.membersNone || '') + '</p>';
             html += addMemberRow(orgId);
@@ -575,6 +624,7 @@ $searchPlaceholder = t('Rechercher une entreprise…');
           state.truncated    = !!data.truncated;
           state.issuer       = data.issuer || '';
           state.membersCache = {};
+          state.membersData  = {};
           updateHeader();
           renderRows();
           if (doneMessage) showAlert(doneMessage, false, true);
@@ -585,6 +635,16 @@ $searchPlaceholder = t('Rechercher une entreprise…');
 
       // Délégation : les lignes sont rendues dynamiquement.
       tbody.addEventListener('click', function (e){
+        var editBtn = e.target.closest ? e.target.closest('[data-edit-org]') : null;
+        if (editBtn) { e.preventDefault(); openAdd(editBtn.getAttribute('data-edit-org')); return; }
+
+        var viewBtn = e.target.closest ? e.target.closest('[data-view-member]') : null;
+        if (viewBtn) {
+          e.preventDefault();
+          openMemberView(viewBtn.getAttribute('data-view-member'), parseInt(viewBtn.getAttribute('data-member-idx'), 10));
+          return;
+        }
+
         var addBtn = e.target.closest ? e.target.closest('[data-add-member]') : null;
         if (addBtn) { e.preventDefault(); openMemberAdd(addBtn.getAttribute('data-add-member')); return; }
 
@@ -607,25 +667,66 @@ $searchPlaceholder = t('Rechercher une entreprise…');
         input.addEventListener('search', applyFilter);
       }
 
-      // ── Ajouter une entreprise ─────────────────────────────────────
+      // ── Ajouter / modifier une entreprise ─────────────────────────
+      // Même modale : editId vide = création, sinon modification.
       var addModal  = document.getElementById('orgAddModal');
       var addForm   = document.getElementById('orgAddForm');
       var addOpen   = document.getElementById('orgAddOpen');
       var addErr    = document.getElementById('orgAddError');
       var addSubmit = document.getElementById('orgAddSubmit');
       var addLabel  = addSubmit ? addSubmit.textContent : '';
+      var addTitle  = document.getElementById('orgAddTitle');
+      var addSub    = document.getElementById('orgAddSub');
+      var aliasHint = document.getElementById('orgAliasHint');
+      var titleTxt  = addTitle ? addTitle.textContent : '';
+      var subTxt    = addSub ? addSub.textContent : '';
+      var hintTxt   = aliasHint ? aliasHint.textContent : '';
+      var editId    = '';
       var lastFocus = null;
+
+      function findOrg(id){
+        for (var i = 0; i < state.orgs.length; i++) if (state.orgs[i].id === id) return state.orgs[i];
+        return null;
+      }
+      function setVal(id, v){ var el = document.getElementById(id); if (el) el.value = v == null ? '' : String(v); }
 
       function setAddError(msg){
         if (!addErr) return;
         addErr.textContent = msg || '';
         addErr.hidden = !msg;
       }
-      function openAdd(){
+      function openAdd(orgId){
         if (!addModal || !addForm) return;
+        var org = (typeof orgId === 'string' && orgId) ? findOrg(orgId) : null;
+        editId = org ? org.id : '';
         lastFocus = document.activeElement;
         addForm.reset();
         setAddError('');
+
+        var aliasEl = document.getElementById('orgAlias');
+        if (org) {
+          var a = org.attributes || {};
+          setVal('orgName',          org.name);
+          setVal('orgNomCommercial', a.nom_commercial || '');
+          setVal('orgRaison',        org.raison);
+          setVal('orgEntite',        org.entite_legal);
+          setVal('orgSiret',         org.siret);
+          setVal('orgTva',           org.tva);
+          setVal('orgEmail',         org.ent_email);
+          setVal('orgTel',           org.telephone);
+          setVal('orgCp',            org.cp);
+          setVal('orgCommune',       org.commune);
+          setVal('orgPays',          org.pays);
+          setVal('orgAlias',         org.alias);
+          setVal('orgDomains',       (org.domains || []).join(', '));
+          var en = document.getElementById('orgEnabled'); if (en) en.checked = !!org.enabled;
+        }
+        if (aliasEl) aliasEl.readOnly = !!org;
+        if (aliasHint) aliasHint.textContent = org ? (I18N.aliasLocked || '') : hintTxt;
+        if (addTitle)  addTitle.textContent  = org ? (I18N.editOrg || 'Modifier') : titleTxt;
+        if (addSub)    addSub.textContent    = org ? (org.label || '') + ' — ' + (I18N.editSub || '') : subTxt;
+        if (addSubmit) addSubmit.textContent = org ? (I18N.editSave || 'Enregistrer') : addLabel;
+
         addModal.classList.add('is-open');
         var first = document.getElementById('orgName');
         if (first) first.focus();
@@ -636,7 +737,7 @@ $searchPlaceholder = t('Rechercher une entreprise…');
         if (lastFocus && lastFocus.focus) lastFocus.focus();
       }
 
-      if (addOpen) addOpen.addEventListener('click', openAdd);
+      if (addOpen) addOpen.addEventListener('click', function (){ openAdd(''); });
       if (addModal) {
         addModal.addEventListener('click', function (e){
           if (e.target === addModal || (e.target.closest && e.target.closest('[data-close]'))) closeAdd();
@@ -657,17 +758,20 @@ $searchPlaceholder = t('Rechercher une entreprise…');
           }
           setAddError('');
 
+          var isEdit = !!editId;
           var body = new URLSearchParams();
+          if (isEdit) body.append('org_id', editId);
           Array.prototype.forEach.call(addForm.elements, function (el){
+            if (isEdit && el.name === 'alias') return;
             if (!el.name || el.type === 'submit' || el.type === 'button') return;
             if (el.type === 'checkbox') body.append(el.name, el.checked ? '1' : '0');
             else body.append(el.name, el.value.trim());
           });
 
           addSubmit.disabled = true;
-          addSubmit.textContent = I18N.creating || '…';
+          addSubmit.textContent = isEdit ? (I18N.saving || '…') : (I18N.creating || '…');
 
-          fetch(API + '?action=org.create', {
+          fetch(API + '?action=' + (isEdit ? 'org.update' : 'org.create'), {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -681,20 +785,68 @@ $searchPlaceholder = t('Rechercher une entreprise…');
           .then(function (r){
             var data = r.data;
             if (!r.ok || !data || !data.ok) {
-              setAddError((data && data.error) ? data.error : (I18N.createErr || 'Erreur.'));
+              setAddError((data && data.error) ? data.error : (isEdit ? I18N.updateErr : I18N.createErr) || 'Erreur.');
               return;
             }
             closeAdd();
-            if (input) input.value = '';
-            load(I18N.created || 'Entreprise créée.');
+            if (!isEdit && input) input.value = '';
+            load(isEdit ? '' : (I18N.created || 'Entreprise créée.'));
           })
-          .catch(function (){ setAddError(I18N.createErr || 'Erreur.'); })
+          .catch(function (){ setAddError((isEdit ? I18N.updateErr : I18N.createErr) || 'Erreur.'); })
           .then(function (){
             addSubmit.disabled = false;
-            addSubmit.textContent = addLabel;
+            addSubmit.textContent = isEdit ? (I18N.editSave || 'Enregistrer') : addLabel;
           });
         });
       }
+
+      // ── Fiche d'un membre (œil) ────────────────────────────────────
+      var vModal = document.getElementById('memberViewModal');
+      var vFocus = null;
+
+      function openMemberView(orgId, idx){
+        var list = state.membersData[orgId] || [];
+        var m = list[idx];
+        if (!m || !vModal) return;
+        vFocus = document.activeElement;
+
+        var org = null;
+        for (var i = 0; i < state.orgs.length; i++) if (state.orgs[i].id === orgId) { org = state.orgs[i]; break; }
+
+        document.getElementById('memberViewAv').textContent    = m.initials || '';
+        document.getElementById('memberViewTitle').textContent = m.name || '';
+        document.getElementById('memberViewSub').textContent   = m.secondary || '';
+
+        var rows = [
+          [I18N.fEmail,      m.email || '—'],
+          [I18N.fUsername,   m.username || '—'],
+          [I18N.fFunction,   m.function || I18N.noFunction || '—'],
+          [I18N.fStatus,     m.status_label || '—'],
+          [I18N.fMembership, m.membership || '—'],
+          [I18N.fOrg,        org ? org.label : '—'],
+          [I18N.fId,         m.id || '—']
+        ];
+        document.getElementById('memberViewList').innerHTML = rows.map(function (r){
+          return '<dt>' + esc(r[0] || '') + '</dt><dd>' + esc(r[1]) + '</dd>';
+        }).join('');
+
+        vModal.classList.add('is-open');
+        var close = vModal.querySelector('[data-close]');
+        if (close) close.focus();
+      }
+      function closeMemberView(){
+        if (!vModal) return;
+        vModal.classList.remove('is-open');
+        if (vFocus && vFocus.focus && document.contains(vFocus)) vFocus.focus();
+      }
+      if (vModal) {
+        vModal.addEventListener('click', function (e){
+          if (e.target === vModal || (e.target.closest && e.target.closest('[data-close]'))) closeMemberView();
+        });
+      }
+      document.addEventListener('keydown', function (e){
+        if (e.key === 'Escape' && vModal && vModal.classList.contains('is-open')) closeMemberView();
+      });
 
       // ── Ajouter un membre ──────────────────────────────────────────
       var mModal  = document.getElementById('memberAddModal');

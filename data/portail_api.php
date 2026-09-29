@@ -210,6 +210,69 @@ function require_post(): void
 }
 
 /**
+ * Lit et valide le formulaire entreprise (création / modification depuis
+ * /entreprises). Répond 400 et s'arrête sur la première erreur.
+ *
+ * @return array{name:string, alias:string, enabled:bool, domains:string[], attributes:array<string,string>}
+ */
+function org_form_input(): array
+{
+    $name = trim((string)($_POST['name'] ?? ''));
+    if (mb_strlen($name) < 2 || mb_strlen($name) > 255) {
+        send_json(400, ['ok' => false, 'error' => "Le nom de l'entreprise doit contenir entre 2 et 255 caractères."]);
+    }
+
+    $alias = trim((string)($_POST['alias'] ?? ''));
+    if ($alias !== '' && !preg_match('/^[A-Za-z0-9._-]{1,255}$/', $alias)) {
+        send_json(400, ['ok' => false, 'error' => 'L’alias ne peut contenir que lettres, chiffres, points, tirets et tirets bas.']);
+    }
+
+    $domains = [];
+    foreach (preg_split('/[\s,;]+/', (string)($_POST['domains'] ?? ''), -1, PREG_SPLIT_NO_EMPTY) as $d) {
+        $d = strtolower(trim($d));
+        if (!preg_match('/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/', $d)) {
+            send_json(400, ['ok' => false, 'error' => 'Domaine invalide : ' . $d]);
+        }
+        $domains[] = $d;
+    }
+
+    $siret = preg_replace('/\s+/', '', (string)($_POST['siret'] ?? ''));
+    if ($siret !== '' && !preg_match('/^\d{14}$/', $siret)) {
+        send_json(400, ['ok' => false, 'error' => 'Le SIRET doit contenir 14 chiffres.']);
+    }
+
+    $email = trim((string)($_POST['ent_email'] ?? ''));
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        send_json(400, ['ok' => false, 'error' => 'Adresse e-mail invalide.']);
+    }
+
+    $attributes = [
+        'nom_commercial' => (string)($_POST['nom_commercial'] ?? ''),
+        'raison'         => (string)($_POST['raison'] ?? ''),
+        'siret'          => $siret,
+        'siren'          => $siret !== '' ? substr($siret, 0, 9) : '',
+        'entite_legal'   => (string)($_POST['entite_legal'] ?? ''),
+        'tva'            => strtoupper(preg_replace('/\s+/', '', (string)($_POST['tva'] ?? ''))),
+        'ent_email'      => $email,
+        'telephone'      => (string)($_POST['telephone'] ?? ''),
+        'cp'             => (string)($_POST['cp'] ?? ''),
+        'commune'        => (string)($_POST['commune'] ?? ''),
+        'pays'           => (string)($_POST['pays'] ?? ''),
+    ];
+    foreach ($attributes as $k => $v) {
+        $attributes[$k] = mb_substr(trim($v), 0, 255);
+    }
+
+    return [
+        'name'       => $name,
+        'alias'      => $alias,
+        'enabled'    => ($_POST['enabled'] ?? '1') !== '0',
+        'domains'    => $domains,
+        'attributes' => $attributes,
+    ];
+}
+
+/**
  * Relaie un payload au webhook n8n UNIQUE, toujours en POST JSON,
  * et renvoie la réponse décodée.
  *
@@ -3233,59 +3296,9 @@ try {
             csrf_check();
             require_once __DIR__ . '/../include/keycloak_esp_client.php';
 
-            $name = trim((string)($_POST['name'] ?? ''));
-            if (mb_strlen($name) < 2 || mb_strlen($name) > 255) {
-                send_json(400, ['ok' => false, 'error' => "Le nom de l'entreprise doit contenir entre 2 et 255 caractères."]);
-            }
+            $input = org_form_input();
 
-            $alias = trim((string)($_POST['alias'] ?? ''));
-            if ($alias !== '' && !preg_match('/^[A-Za-z0-9._-]{1,255}$/', $alias)) {
-                send_json(400, ['ok' => false, 'error' => 'L’alias ne peut contenir que lettres, chiffres, points, tirets et tirets bas.']);
-            }
-
-            $domains = [];
-            foreach (preg_split('/[\s,;]+/', (string)($_POST['domains'] ?? ''), -1, PREG_SPLIT_NO_EMPTY) as $d) {
-                $d = strtolower(trim($d));
-                if (!preg_match('/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/', $d)) {
-                    send_json(400, ['ok' => false, 'error' => 'Domaine invalide : ' . $d]);
-                }
-                $domains[] = $d;
-            }
-
-            $siret = preg_replace('/\s+/', '', (string)($_POST['siret'] ?? ''));
-            if ($siret !== '' && !preg_match('/^\d{14}$/', $siret)) {
-                send_json(400, ['ok' => false, 'error' => 'Le SIRET doit contenir 14 chiffres.']);
-            }
-
-            $email = trim((string)($_POST['ent_email'] ?? ''));
-            if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                send_json(400, ['ok' => false, 'error' => 'Adresse e-mail invalide.']);
-            }
-
-            $attributes = [
-                'nom_commercial' => (string)($_POST['nom_commercial'] ?? ''),
-                'raison'         => (string)($_POST['raison'] ?? ''),
-                'siret'          => $siret,
-                'siren'          => $siret !== '' ? substr($siret, 0, 9) : '',
-                'entite_legal'   => (string)($_POST['entite_legal'] ?? ''),
-                'tva'            => strtoupper(preg_replace('/\s+/', '', (string)($_POST['tva'] ?? ''))),
-                'ent_email'      => $email,
-                'telephone'      => (string)($_POST['telephone'] ?? ''),
-                'cp'             => (string)($_POST['cp'] ?? ''),
-                'commune'        => (string)($_POST['commune'] ?? ''),
-                'pays'           => (string)($_POST['pays'] ?? ''),
-            ];
-            foreach ($attributes as $k => $v) {
-                $attributes[$k] = mb_substr(trim($v), 0, 255);
-            }
-
-            $created = kcEspOrganizationCreate([
-                'name'       => $name,
-                'alias'      => $alias,
-                'enabled'    => ($_POST['enabled'] ?? '1') !== '0',
-                'domains'    => $domains,
-                'attributes' => $attributes,
-            ]);
+            $created = kcEspOrganizationCreate($input);
             if (!$created['ok']) {
                 send_json(200, [
                     'ok'    => false,
@@ -3295,6 +3308,30 @@ try {
             }
 
             send_json(200, ['ok' => true, 'org' => $created['org']]);
+        }
+
+        // Modification d'une entreprise depuis /entreprises (bouton stylo).
+        // POST + X-CSRF-Token. L'alias n'est pas modifiable dans Keycloak.
+        case 'org.update': {
+            require_post();
+            csrf_check();
+            require_once __DIR__ . '/../include/keycloak_esp_client.php';
+
+            $orgId = trim((string)($_POST['org_id'] ?? ''));
+            if ($orgId === '') {
+                send_json(400, ['ok' => false, 'error' => 'Organisation non identifiée.']);
+            }
+
+            $updated = kcEspOrganizationUpdate($orgId, org_form_input());
+            if (!$updated['ok']) {
+                send_json(200, [
+                    'ok'    => false,
+                    'code'  => 502,
+                    'error' => $updated['error'] !== '' ? $updated['error'] : 'Modification de l’entreprise impossible.',
+                ]);
+            }
+
+            send_json(200, ['ok' => true, 'org' => $updated['org']]);
         }
 
         // Ajout d'un membre depuis /entreprises (« Ajouter un membre + ») :

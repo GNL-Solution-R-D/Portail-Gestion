@@ -12,6 +12,7 @@
         GET /admin/realms/{realm}/organizations/{id}/members
 
         POST /admin/realms/{realm}/organizations                    (création)
+        PUT  /admin/realms/{realm}/organizations/{id}               (modification)
         POST /admin/realms/{realm}/organizations/{id}/members/invite-user
 
    ⚠️ CE FICHIER N'UTILISE PAS LE CLIENT KEYCLOAK DU PORTAIL GESTION.
@@ -611,8 +612,9 @@ if (!function_exists('kcEspOrganizationMembers')) {
  * ne lève jamais, renvoie { status, body, error }.
  */
 if (!function_exists('kcEspAdminPost')) {
-    function kcEspAdminPost(string $path, array $payload, bool $asForm = false): array
+    function kcEspAdminPost(string $path, array $payload, bool $asForm = false, string $method = 'POST'): array
     {
+        $method = strtoupper($method);
         $problem = kcEspConfigProblem();
         if ($problem !== '') {
             return ['status' => 0, 'body' => [], 'error' => $problem];
@@ -630,7 +632,8 @@ if (!function_exists('kcEspAdminPost')) {
 
         try {
             $resp = keycloakHttpRequest(kcEspAdminBase() . $path, [
-                CURLOPT_POST       => true,
+                CURLOPT_POST          => true,
+                CURLOPT_CUSTOMREQUEST => $method,
                 CURLOPT_POSTFIELDS => $asForm
                     ? http_build_query($payload, '', '&', PHP_QUERY_RFC3986)
                     : json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
@@ -641,7 +644,7 @@ if (!function_exists('kcEspAdminPost')) {
                 ],
             ]);
         } catch (Throwable $e) {
-            error_log('[GNL KC-ESP] POST ' . $path . ' : ' . $e->getMessage());
+            error_log('[GNL KC-ESP] ' . $method . ' ' . $path . ' : ' . $e->getMessage());
             return ['status' => 0, 'body' => [], 'error' => 'Keycloak est injoignable.'];
         }
 
@@ -664,7 +667,7 @@ if (!function_exists('kcEspAdminPost')) {
         } elseif (!empty($body['error'])) {
             $error .= ' — ' . (string) $body['error'];
         }
-        error_log('[GNL KC-ESP] POST ' . $path . ' → ' . $error);
+        error_log('[GNL KC-ESP] ' . $method . ' ' . $path . ' → ' . $error);
 
         return ['status' => $status, 'body' => $body, 'error' => $error];
     }
@@ -756,5 +759,75 @@ if (!function_exists('kcEspOrganizationInviteMember')) {
             return ['ok' => false, 'error' => $r['error']];
         }
         return ['ok' => true, 'error' => ''];
+    }
+}
+
+/* ====================== Modification d'une organisation ================= */
+
+/**
+ * Met à jour une organisation (PUT /organizations/{id}). L'Admin REST
+ * attend la représentation COMPLÈTE : on relit l'organisation, on fusionne
+ * puis on renvoie tout.
+ *   - name, enabled : remplacés ;
+ *   - alias : non modifiable côté Keycloak, conservé tel quel ;
+ *   - domains : remplacés par la liste fournie ; un domaine déjà présent
+ *     garde son indicateur « verified » ;
+ *   - attributes : seules les clés fournies sont touchées (valeur vide =
+ *     attribut supprimé) ; les autres (namespace…) sont conservées.
+ *
+ * @return array{ok:bool, org:?array, error:string}
+ */
+if (!function_exists('kcEspOrganizationUpdate')) {
+    function kcEspOrganizationUpdate(string $orgId, array $input): array
+    {
+        $orgId = trim($orgId);
+        if ($orgId === '') {
+            return ['ok' => false, 'org' => null, 'error' => 'Organisation non identifiée.'];
+        }
+        $name = trim((string) ($input['name'] ?? ''));
+        if ($name === '') {
+            return ['ok' => false, 'org' => null, 'error' => "Le nom de l'entreprise est obligatoire."];
+        }
+
+        $path = '/organizations/' . rawurlencode($orgId);
+        $cur  = kcEspAdminGet($path);
+        if ($cur['error'] !== '' || empty($cur['body']['id'])) {
+            return ['ok' => false, 'org' => null, 'error' => $cur['error'] !== '' ? $cur['error'] : 'Organisation Keycloak introuvable.'];
+        }
+        $org = $cur['body'];
+
+        $org['name']    = $name;
+        $org['enabled'] = !array_key_exists('enabled', $input) || (bool) $input['enabled'];
+
+        // Domaines : on garde « verified » pour ceux qui existaient déjà.
+        $verified = [];
+        foreach ((array) ($org['domains'] ?? []) as $d) {
+            if (is_array($d) && isset($d['name'])) {
+                $verified[strtolower((string) $d['name'])] = !empty($d['verified']);
+            }
+        }
+        $domains = [];
+        foreach ((array) ($input['domains'] ?? []) as $d) {
+            $d = strtolower(trim((string) $d));
+            if ($d !== '') $domains[$d] = ['name' => $d, 'verified' => $verified[$d] ?? false];
+        }
+        $org['domains'] = array_values($domains);
+
+        // Attributs : fusion clé par clé.
+        $attrs = (isset($org['attributes']) && is_array($org['attributes'])) ? $org['attributes'] : [];
+        foreach ((array) ($input['attributes'] ?? []) as $k => $v) {
+            $v = trim((string) $v);
+            if ($v === '') unset($attrs[(string) $k]);
+            else $attrs[(string) $k] = [$v];
+        }
+        $org['attributes'] = $attrs === [] ? new stdClass() : $attrs;
+
+        $r = kcEspAdminPost($path, $org, false, 'PUT');
+        if ($r['error'] !== '') {
+            return ['ok' => false, 'org' => null, 'error' => $r['error']];
+        }
+
+        $org['attributes'] = $attrs;
+        return ['ok' => true, 'org' => kcEspOrgNormalize($org), 'error' => ''];
     }
 }
