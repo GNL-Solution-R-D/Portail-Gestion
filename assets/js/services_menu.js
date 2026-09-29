@@ -16,13 +16,11 @@
  *
  * Remplace assets/js/k8s_menu.js (déploiements Kubernetes) pour « Services WEB ».
  *
- * DÉPLIANTS VIDES — une catégorie sans aucun service actif ou suspendu est
- * masquée entièrement (bouton compris) : un client qui n'a pas de serveur dédié
- * ne voit pas « Serveurs Dédiés ». Le dépliant réapparaît dès qu'un service y
- * entre. Les 5 dépliants sont MASQUÉS PAR DÉFAUT (attribut « hidden » dans
- * include/menu.php) : rien n'apparaît pendant le chargement, seules les
- * catégories qui contiennent au moins un service sont affichées ensuite.
- * En cas d'erreur, seul « Services WEB » s'affiche, avec le message.
+ * DÉPLIANTS TOUJOURS VISIBLES — les 5 dépliants sont affichés en permanence
+ * (portail gestion : on veut voir toutes les catégories). Une catégorie sans
+ * service actif ou suspendu affiche « Aucun service. » une fois ouverte.
+ * En cas d'erreur, le message s'affiche dans « Services WEB » et les autres
+ * dépliants indiquent « Indisponible. ».
  *
  * RENOMMAGE — clic droit sur un service → « Renommer ». Réutilise le menu
  * contextuel (#deploymentContextMenu) et le modal (#renameDeploymentModal)
@@ -99,8 +97,8 @@
   // ── Chargement + rendu ──────────────────────────────────────────────────────
 
   async function load(force) {
-    // Aucun changement de visibilité ici : au premier chargement tout reste
-    // masqué (HTML), lors d'un rechargement les dépliants gardent leur état.
+    // Les dépliants sont visibles dès le HTML : « Chargement… » s'affiche
+    // dans chacun jusqu'à la réponse.
     setAll('<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Chargement…</div>');
 
     var url = new URL(apiUrl.toString());
@@ -137,9 +135,9 @@
           hosts[key].innerHTML = renderGrouped(entries, key);
           showBlock(key, true);
         } else {
-          // Aucun service dans cette catégorie : le dépliant disparaît.
-          hosts[key].innerHTML = '';
-          showBlock(key, false);
+          // Aucun service dans cette catégorie : le dépliant reste affiché.
+          hosts[key].innerHTML = EMPTY_HTML;
+          showBlock(key, true);
         }
       });
 
@@ -373,14 +371,15 @@
     return hosts[key].closest('[data-slot="collapsible"]');
   }
 
-  // Un dépliant sans service n'a rien à ouvrir : on le retire du menu plutôt
-  // que d'afficher un bouton qui ne mène à rien. « hidden » suffit : le
-  // conteneur n'a aucune classe d'affichage qui pourrait le contredire.
+  var EMPTY_HTML = '<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Aucun service.</div>';
+
+  // Les dépliants sont toujours affichés ; data-services-empty marque ceux
+  // qui n'ont aucun service (utile pour un style éventuel).
   function showBlock(key, visible) {
     var block = blockOf(key);
     if (!block) return;
-    block.hidden = !visible;
-    if (visible) block.removeAttribute('data-services-empty');
+    block.hidden = false;
+    if (visible && hosts[key].innerHTML !== EMPTY_HTML) block.removeAttribute('data-services-empty');
     else block.setAttribute('data-services-empty', 'true');
   }
 
@@ -390,9 +389,8 @@
     });
   }
 
-  // Erreur : un seul message, dans le premier dépliant disponible (Services WEB
-  // en priorité), pour ne pas faire disparaître le menu sans explication.
-  // Les autres catégories sont masquées.
+  // Erreur : le message dans le premier dépliant (Services WEB en priorité),
+  // « Indisponible. » dans les autres, qui restent affichés.
   function showError(html) {
     var keys = Object.keys(hosts);
     var target = hosts.web ? 'web' : keys[0];
@@ -401,8 +399,8 @@
         hosts[key].innerHTML = html;
         showBlock(key, true);
       } else {
-        hosts[key].innerHTML = '';
-        showBlock(key, false);
+        hosts[key].innerHTML = '<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Indisponible.</div>';
+        showBlock(key, true);
       }
     });
   }
