@@ -107,7 +107,7 @@ $searchPlaceholder = t('Rechercher une entreprise…');
     .org-link:hover{opacity:1;background:color-mix(in srgb, currentColor 8%, transparent);}
     @media (prefers-reduced-motion: reduce){ .org-link{transition:none;} }
 
-    .tm-btn{display:inline-flex;align-items:center;justify-content:center;gap:.35rem;height:2.25rem;padding:0 .75rem;border:1px solid var(--border,#e2e8f0);border-radius:.375rem;font-size:.875rem;font-weight:500;background:var(--background,#fff);color:inherit;cursor:pointer;white-space:nowrap;transition:background .15s, opacity .15s;}
+    .tm-btn{display:inline-flex;align-items:center;justify-content:center;gap:.35rem;height:2.25rem;padding:0 .75rem;border:1px solid var(--border,#e2e8f0);border-radius:3px;font-size:.875rem;font-weight:500;background:var(--background,#fff);color:inherit;cursor:pointer;white-space:nowrap;transition:background .15s, opacity .15s;}
     .tm-btn:hover{background:var(--secondary,#f1f5f9);}
     .tm-btn:disabled{opacity:.5;cursor:not-allowed;}
     .tm-btn--primary{background:var(--primary,#0f172a);color:var(--primary-foreground,#fff);border-color:transparent;}
@@ -140,21 +140,8 @@ $searchPlaceholder = t('Rechercher une entreprise…');
     </aside>
     <main class="dashboard-main">
       <div class="app-shell-offset-min-height w-full bg-surface p-6 space-y-6">
-        <div class="bg-background text-card-foreground flex flex-col gap-3 rounded-xl border py-6 shadow-sm">
-          <div class="px-6">
-            <h1 class="text-lg font-semibold"><?= t('Entreprises') ?></h1>
-            <p class="text-sm text-muted-foreground">
-              <?= t('Organisations enregistrées dans l’espace client.') ?>
-            </p>
-          </div>
-          <div class="px-6 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <span id="realmBadge" class="inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300" hidden></span>
-          </div>
-        </div>
 
-        <div id="orgsAlerts" class="space-y-3"></div>
-
-        <section class="bg-background text-card-foreground rounded-xl border py-6 shadow-sm">
+        <section class="bg-background text-card-foreground rounded border py-4 shadow-sm">
           <div class="px-6 pb-4 border-b flex items-start justify-between gap-4 flex-wrap">
             <div>
               <h2 class="text-base font-semibold"><?= t('Liste des entreprises') ?></h2>
@@ -187,7 +174,7 @@ $searchPlaceholder = t('Rechercher une entreprise…');
           </div>
 
           <div class="px-6 pt-4 flex justify-end">
-            <span id="orgsCount" class="inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+            <span id="orgsCount" class="inline-flex items-center justify-center rounded border px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
                   data-suffix="<?php echo h(t('entreprise(s)')); ?>">…</span>
           </div>
         </section>
