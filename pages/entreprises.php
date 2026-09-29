@@ -12,8 +12,8 @@
    On déplie une ligne → on charge ses membres une seule fois
    (?action=org.members&org_id=…), puis on garde le résultat en mémoire.
 
-   LECTURE SEULE : Keycloak est la source de vérité, la page ne propose
-   aucune écriture.
+   Keycloak reste la source de vérité. Seule écriture proposée : le bouton
+   « Ajouter » du tableau, qui crée une organisation (?action=org.create).
    ===================================================================== */
 
 require_once '../include/session_bootstrap.php';
@@ -107,6 +107,24 @@ $searchPlaceholder = t('Rechercher une entreprise…');
     .org-link:hover{opacity:1;background:color-mix(in srgb, currentColor 8%, transparent);}
     @media (prefers-reduced-motion: reduce){ .org-link{transition:none;} }
 
+    .tm-btn{display:inline-flex;align-items:center;justify-content:center;gap:.35rem;height:2.25rem;padding:0 .75rem;border:1px solid var(--border,#e2e8f0);border-radius:.375rem;font-size:.875rem;font-weight:500;background:var(--background,#fff);color:inherit;cursor:pointer;white-space:nowrap;transition:background .15s, opacity .15s;}
+    .tm-btn:hover{background:var(--secondary,#f1f5f9);}
+    .tm-btn:disabled{opacity:.5;cursor:not-allowed;}
+    .tm-btn--primary{background:var(--primary,#0f172a);color:var(--primary-foreground,#fff);border-color:transparent;}
+    .tm-btn--primary:hover{background:var(--primary,#0f172a);opacity:.9;}
+    .tm-modal{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,.5);backdrop-filter:blur(4px);}
+    .tm-modal.is-open{display:flex;}
+    .tm-dialog{width:100%;max-width:40rem;max-height:calc(100vh - 2rem);overflow:auto;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;background:var(--card,#fff);color:var(--card-foreground,#0f172a);box-shadow:0 10px 30px rgba(0,0,0,.2);}
+    .tm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem 1rem;}
+    .tm-grid .tm-span{grid-column:1 / -1;}
+    @media (max-width: 560px){ .tm-grid{grid-template-columns:1fr;} }
+    .tm-field label{display:block;margin-bottom:.35rem;font-size:.75rem;font-weight:500;color:var(--muted-foreground,#64748b);}
+    .tm-field input[type=text],.tm-field input[type=email],.tm-field input[type=tel]{height:2.5rem;width:100%;border:1px solid var(--border,#e2e8f0);border-radius:.375rem;background:var(--background,#fff);color:inherit;padding:0 .75rem;font-size:.875rem;}
+    .tm-check{display:flex;align-items:center;gap:.5rem;font-size:.875rem;}
+    .tm-error{font-size:.8rem;color:#b91c1c;}
+    .tm-hint{font-size:.75rem;color:var(--muted-foreground,#64748b);margin-top:.25rem;}
+    @media (prefers-reduced-motion: reduce){ .tm-btn{transition:none;} }
+
     @media (max-width: 1024px) {
       .dashboard-layout { flex-direction: column; }
       .dashboard-sidebar {width:100%;max-width:none;flex:0 0 auto;height:auto !important;}
@@ -130,9 +148,6 @@ $searchPlaceholder = t('Rechercher une entreprise…');
             </p>
           </div>
           <div class="px-6 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <span id="orgsCount" class="inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                  data-suffix="<?php echo h(t('entreprise(s)')); ?>">…</span>
-            <span id="readOnlyBadge" class="inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"></span>
             <span id="realmBadge" class="inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300" hidden></span>
           </div>
         </div>
@@ -143,8 +158,12 @@ $searchPlaceholder = t('Rechercher une entreprise…');
           <div class="px-6 pb-4 border-b flex items-start justify-between gap-4 flex-wrap">
             <div>
               <h2 class="text-base font-semibold"><?= t('Liste des entreprises') ?></h2>
-              <p class="text-sm text-muted-foreground"><?= t('Organisations Keycloak de l’espace client') ?></p>
+              <p class="text-sm text-muted-foreground"><?= t('Organisations enregistrées dans l’espace client.') ?></p>
             </div>
+            <button type="button" class="tm-btn tm-btn--primary" id="orgAddOpen">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+              <?= t('Ajouter') ?>
+            </button>
           </div>
 
           <div class="table-wrap" data-slot="card-content">
@@ -166,9 +185,92 @@ $searchPlaceholder = t('Rechercher une entreprise…');
               </tbody>
             </table>
           </div>
+
+          <div class="px-6 pt-4 flex justify-end">
+            <span id="orgsCount" class="inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                  data-suffix="<?php echo h(t('entreprise(s)')); ?>">…</span>
+          </div>
         </section>
       </div>
     </main>
+  </div>
+
+  <!-- Modale : ajouter une entreprise -->
+  <div id="orgAddModal" class="tm-modal" role="dialog" aria-modal="true" aria-labelledby="orgAddTitle">
+    <div class="tm-dialog">
+      <form id="orgAddForm" class="p-6" novalidate>
+        <h2 id="orgAddTitle" class="text-lg font-semibold"><?= t('Ajouter une entreprise') ?></h2>
+        <p class="text-sm text-muted-foreground mt-1"><?= t('Crée une nouvelle organisation dans l’espace client.') ?></p>
+
+        <div class="tm-grid mt-5">
+          <div class="tm-field">
+            <label for="orgName"><?= t('Nom de l’organisation') ?> *</label>
+            <input type="text" id="orgName" name="name" required maxlength="255" autocomplete="off">
+          </div>
+          <div class="tm-field">
+            <label for="orgNomCommercial"><?= t('Nom commercial') ?></label>
+            <input type="text" id="orgNomCommercial" name="nom_commercial" maxlength="255" autocomplete="off">
+          </div>
+          <div class="tm-field">
+            <label for="orgRaison"><?= t('Raison sociale') ?></label>
+            <input type="text" id="orgRaison" name="raison" maxlength="255" autocomplete="off">
+          </div>
+          <div class="tm-field">
+            <label for="orgEntite"><?= t('Forme juridique') ?></label>
+            <input type="text" id="orgEntite" name="entite_legal" maxlength="255" placeholder="SAS, SARL…" autocomplete="off">
+          </div>
+          <div class="tm-field">
+            <label for="orgSiret"><?= t('SIRET') ?></label>
+            <input type="text" id="orgSiret" name="siret" inputmode="numeric" maxlength="20" autocomplete="off">
+          </div>
+          <div class="tm-field">
+            <label for="orgTva"><?= t('N° TVA') ?></label>
+            <input type="text" id="orgTva" name="tva" maxlength="32" autocomplete="off">
+          </div>
+          <div class="tm-field">
+            <label for="orgEmail"><?= t('E-mail') ?></label>
+            <input type="email" id="orgEmail" name="ent_email" maxlength="255" autocomplete="off">
+          </div>
+          <div class="tm-field">
+            <label for="orgTel"><?= t('Téléphone') ?></label>
+            <input type="tel" id="orgTel" name="telephone" maxlength="32" autocomplete="off">
+          </div>
+          <div class="tm-field">
+            <label for="orgCp"><?= t('Code postal') ?></label>
+            <input type="text" id="orgCp" name="cp" maxlength="16" autocomplete="off">
+          </div>
+          <div class="tm-field">
+            <label for="orgCommune"><?= t('Commune') ?></label>
+            <input type="text" id="orgCommune" name="commune" maxlength="255" autocomplete="off">
+          </div>
+          <div class="tm-field">
+            <label for="orgPays"><?= t('Pays') ?></label>
+            <input type="text" id="orgPays" name="pays" maxlength="64" value="France" autocomplete="off">
+          </div>
+          <div class="tm-field">
+            <label for="orgAlias"><?= t('Alias') ?></label>
+            <input type="text" id="orgAlias" name="alias" maxlength="255" autocomplete="off">
+            <p class="tm-hint"><?= t('Facultatif — déduit du nom si vide.') ?></p>
+          </div>
+          <div class="tm-field tm-span">
+            <label for="orgDomains"><?= t('Domaines') ?></label>
+            <input type="text" id="orgDomains" name="domains" maxlength="1000" placeholder="exemple.fr, exemple.com" autocomplete="off">
+            <p class="tm-hint"><?= t('Séparés par des virgules.') ?></p>
+          </div>
+          <label class="tm-check tm-span">
+            <input type="checkbox" id="orgEnabled" name="enabled" checked>
+            <?= t('Organisation activée') ?>
+          </label>
+        </div>
+
+        <div id="orgAddError" class="tm-error mt-4" role="alert" hidden></div>
+
+        <div class="mt-6 flex justify-end gap-2">
+          <button type="button" class="tm-btn" data-close><?= t('Annuler') ?></button>
+          <button type="submit" class="tm-btn tm-btn--primary" id="orgAddSubmit"><?= t('Créer l’entreprise') ?></button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- Entreprises : organisations Keycloak de l'espace client via
@@ -177,12 +279,16 @@ $searchPlaceholder = t('Rechercher une entreprise…');
        Les membres sont chargés à la demande (?action=org.members). -->
   <script>
     window.ORG_API_URL = window.ORG_API_URL || "../data/portail_api.php";
+    window.ORG_CSRF = <?= json_encode((string) ($_SESSION['csrf'] ?? ''), JSON_UNESCAPED_SLASHES) ?>;
     window.ORG_I18N = {
       loading:     <?= json_encode(t('Chargement des entreprises…'), JSON_UNESCAPED_UNICODE) ?>,
       empty:       <?= json_encode(t('Aucune entreprise enregistrée.'), JSON_UNESCAPED_UNICODE) ?>,
       noResults:   <?= json_encode(t('Aucune entreprise ne correspond à votre recherche.'), JSON_UNESCAPED_UNICODE) ?>,
       error:       <?= json_encode(t('Impossible de charger les entreprises.'), JSON_UNESCAPED_UNICODE) ?>,
-      readOnly:    <?= json_encode(t('Lecture seule'), JSON_UNESCAPED_UNICODE) ?>,
+      nameRequired:<?= json_encode(t('Le nom de l’organisation est obligatoire.'), JSON_UNESCAPED_UNICODE) ?>,
+      createErr:   <?= json_encode(t('Impossible de créer l’entreprise.'), JSON_UNESCAPED_UNICODE) ?>,
+      creating:    <?= json_encode(t('Création…'), JSON_UNESCAPED_UNICODE) ?>,
+      created:     <?= json_encode(t('Entreprise créée.'), JSON_UNESCAPED_UNICODE) ?>,
       truncated:   <?= json_encode(t('Liste tronquée : seules les premières entreprises sont affichées.'), JSON_UNESCAPED_UNICODE) ?>,
       active:      <?= json_encode(t('Activée'), JSON_UNESCAPED_UNICODE) ?>,
       inactive:    <?= json_encode(t('Désactivée'), JSON_UNESCAPED_UNICODE) ?>,
@@ -215,7 +321,6 @@ $searchPlaceholder = t('Rechercher une entreprise…');
       var input    = document.getElementById('orgsSearchInput');
       var tbody    = document.getElementById('orgsTableBody');
       var counter  = document.getElementById('orgsCount');
-      var roBadge  = document.getElementById('readOnlyBadge');
       var realmEl  = document.getElementById('realmBadge');
       var alerts   = document.getElementById('orgsAlerts');
       if (!tbody) return;
@@ -227,14 +332,16 @@ $searchPlaceholder = t('Rechercher une entreprise…');
 
       function setCounter(n){ if (counter) counter.textContent = (n==null?'…':n) + (suffix ? ' ' + suffix : ''); }
 
-      function showAlert(message, isError){
+      function showAlert(message, isError, isSuccess){
         if (!alerts) return;
         alerts.innerHTML = '';
         if (!message) return;
         var div = document.createElement('div');
         div.className = 'rounded-xl border px-6 py-4 text-sm ' + (isError
           ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/30 dark:bg-red-950/30 dark:text-red-300'
-          : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/30 dark:bg-amber-950/30 dark:text-amber-300');
+          : isSuccess
+            ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/30 dark:bg-green-950/30 dark:text-green-300'
+            : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/30 dark:bg-amber-950/30 dark:text-amber-300');
         div.textContent = message;
         alerts.appendChild(div);
       }
@@ -350,7 +457,6 @@ $searchPlaceholder = t('Rechercher une entreprise…');
       }
 
       function updateHeader(){
-        if (roBadge) roBadge.textContent = I18N.readOnly || 'Lecture seule';
         if (realmEl) {
           // Realm réellement interrogé : utile quand on doute de la source.
           var realm = '';
@@ -410,7 +516,7 @@ $searchPlaceholder = t('Rechercher une entreprise…');
         });
       }
 
-      function load(){
+      function load(doneMessage){
         tbody.innerHTML = stateRow(I18N.loading || 'Chargement…', false);
         setCounter(null);
         fetch(API + '?action=org.list', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
@@ -430,7 +536,8 @@ $searchPlaceholder = t('Rechercher une entreprise…');
           state.membersCache = {};
           updateHeader();
           renderRows();
-          showAlert(state.truncated ? (I18N.truncated || '') : '', false);
+          if (doneMessage) showAlert(doneMessage, false, true);
+          else showAlert(state.truncated ? (I18N.truncated || '') : '', false);
         })
         .catch(function (){ tbody.innerHTML = stateRow(I18N.error || 'Impossible de charger les entreprises.', true); setCounter(null); });
       }
@@ -454,6 +561,95 @@ $searchPlaceholder = t('Rechercher une entreprise…');
       if (input) {
         input.addEventListener('input', applyFilter);
         input.addEventListener('search', applyFilter);
+      }
+
+      // ── Ajouter une entreprise ─────────────────────────────────────
+      var addModal  = document.getElementById('orgAddModal');
+      var addForm   = document.getElementById('orgAddForm');
+      var addOpen   = document.getElementById('orgAddOpen');
+      var addErr    = document.getElementById('orgAddError');
+      var addSubmit = document.getElementById('orgAddSubmit');
+      var addLabel  = addSubmit ? addSubmit.textContent : '';
+      var lastFocus = null;
+
+      function setAddError(msg){
+        if (!addErr) return;
+        addErr.textContent = msg || '';
+        addErr.hidden = !msg;
+      }
+      function openAdd(){
+        if (!addModal || !addForm) return;
+        lastFocus = document.activeElement;
+        addForm.reset();
+        setAddError('');
+        addModal.classList.add('is-open');
+        var first = document.getElementById('orgName');
+        if (first) first.focus();
+      }
+      function closeAdd(){
+        if (!addModal) return;
+        addModal.classList.remove('is-open');
+        if (lastFocus && lastFocus.focus) lastFocus.focus();
+      }
+
+      if (addOpen) addOpen.addEventListener('click', openAdd);
+      if (addModal) {
+        addModal.addEventListener('click', function (e){
+          if (e.target === addModal || (e.target.closest && e.target.closest('[data-close]'))) closeAdd();
+        });
+      }
+      document.addEventListener('keydown', function (e){
+        if (e.key === 'Escape' && addModal && addModal.classList.contains('is-open')) closeAdd();
+      });
+
+      if (addForm) {
+        addForm.addEventListener('submit', function (e){
+          e.preventDefault();
+          var nameEl = document.getElementById('orgName');
+          if (!nameEl || !nameEl.value.trim()) {
+            setAddError(I18N.nameRequired || 'Nom obligatoire.');
+            if (nameEl) nameEl.focus();
+            return;
+          }
+          setAddError('');
+
+          var body = new URLSearchParams();
+          Array.prototype.forEach.call(addForm.elements, function (el){
+            if (!el.name || el.type === 'submit' || el.type === 'button') return;
+            if (el.type === 'checkbox') body.append(el.name, el.checked ? '1' : '0');
+            else body.append(el.name, el.value.trim());
+          });
+
+          addSubmit.disabled = true;
+          addSubmit.textContent = I18N.creating || '…';
+
+          fetch(API + '?action=org.create', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'X-CSRF-Token': window.ORG_CSRF || ''
+            },
+            body: body.toString()
+          })
+          .then(function (res){ return res.json().catch(function(){ return null; }).then(function (data){ return { ok: res.ok, data: data }; }); })
+          .then(function (r){
+            var data = r.data;
+            if (!r.ok || !data || !data.ok) {
+              setAddError((data && data.error) ? data.error : (I18N.createErr || 'Erreur.'));
+              return;
+            }
+            closeAdd();
+            if (input) input.value = '';
+            load(I18N.created || 'Entreprise créée.');
+          })
+          .catch(function (){ setAddError(I18N.createErr || 'Erreur.'); })
+          .then(function (){
+            addSubmit.disabled = false;
+            addSubmit.textContent = addLabel;
+          });
+        });
       }
 
       load();

@@ -599,3 +599,120 @@ if (!function_exists('kcEspOrganizationMembers')) {
         return ['ok' => true, 'members' => $out, 'truncated' => $truncated, 'error' => ''];
     }
 }
+
+/* ======================= Création d'une organisation =================== */
+
+/**
+ * POST JSON sur l'Admin REST API du realm ESP-CLI. Même contrat que
+ * kcEspAdminGet() : ne lève jamais, renvoie { status, body, error }.
+ */
+if (!function_exists('kcEspAdminPost')) {
+    function kcEspAdminPost(string $path, array $payload): array
+    {
+        $problem = kcEspConfigProblem();
+        if ($problem !== '') {
+            return ['status' => 0, 'body' => [], 'error' => $problem];
+        }
+
+        $bearer = kcEspAdminToken();
+        if ($bearer === null) {
+            return [
+                'status' => 0,
+                'body'   => [],
+                'error'  => "Keycloak a refusé le jeton de service du client « " . kcEspClientId() . " » sur "
+                    . kcEspIssuer() . " (le détail HTTP est dans les logs du portail).",
+            ];
+        }
+
+        try {
+            $resp = keycloakHttpRequest(kcEspAdminBase() . $path, [
+                CURLOPT_POST       => true,
+                CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                CURLOPT_HTTPHEADER => [
+                    'Accept: application/json',
+                    'Content-Type: application/json',
+                    'Authorization: Bearer ' . $bearer,
+                ],
+            ]);
+        } catch (Throwable $e) {
+            error_log('[GNL KC-ESP] POST ' . $path . ' : ' . $e->getMessage());
+            return ['status' => 0, 'body' => [], 'error' => 'Keycloak est injoignable.'];
+        }
+
+        $status = (int) ($resp['status'] ?? 0);
+        $body   = (isset($resp['body']) && is_array($resp['body'])) ? $resp['body'] : [];
+
+        if ($status >= 200 && $status < 300) {
+            return ['status' => $status, 'body' => $body, 'error' => ''];
+        }
+
+        $error = 'Keycloak a renvoyé HTTP ' . $status . ' sur ' . $path;
+        if ($status === 403) {
+            $error .= " — le compte de service n'a pas le rôle « manage-organizations » (realm-management).";
+        } elseif ($status === 409) {
+            $error = 'Une entreprise porte déjà ce nom, cet alias ou ce domaine.';
+        } elseif (!empty($body['errorMessage'])) {
+            $error .= ' — ' . (string) $body['errorMessage'];
+        } elseif (!empty($body['error'])) {
+            $error .= ' — ' . (string) $body['error'];
+        }
+        error_log('[GNL KC-ESP] POST ' . $path . ' → ' . $error);
+
+        return ['status' => $status, 'body' => $body, 'error' => $error];
+    }
+}
+
+/**
+ * Crée une organisation dans le realm ESP-CLI.
+ *
+ * $input : name (obligatoire), alias, enabled, domains (string[]) et
+ * attributes ({cle: "valeur"}) — les attributs vides sont ignorés.
+ *
+ * @return array{ok:bool, org:?array, error:string}
+ */
+if (!function_exists('kcEspOrganizationCreate')) {
+    function kcEspOrganizationCreate(array $input): array
+    {
+        $name = trim((string) ($input['name'] ?? ''));
+        if ($name === '') {
+            return ['ok' => false, 'org' => null, 'error' => "Le nom de l'entreprise est obligatoire."];
+        }
+
+        $payload = [
+            'name'    => $name,
+            'enabled' => !array_key_exists('enabled', $input) || (bool) $input['enabled'],
+        ];
+
+        $alias = trim((string) ($input['alias'] ?? ''));
+        if ($alias !== '') {
+            $payload['alias'] = $alias;
+        }
+
+        $domains = [];
+        foreach ((array) ($input['domains'] ?? []) as $d) {
+            $d = strtolower(trim((string) $d));
+            if ($d !== '') $domains[$d] = ['name' => $d, 'verified' => false];
+        }
+        if ($domains !== []) {
+            $payload['domains'] = array_values($domains);
+        }
+
+        $attrs = [];
+        foreach ((array) ($input['attributes'] ?? []) as $k => $v) {
+            $v = trim((string) $v);
+            if ($v !== '') $attrs[(string) $k] = [$v];
+        }
+        if ($attrs !== []) {
+            $payload['attributes'] = $attrs;
+        }
+
+        $r = kcEspAdminPost('/organizations', $payload);
+        if ($r['error'] !== '') {
+            return ['ok' => false, 'org' => null, 'error' => $r['error']];
+        }
+
+        // Keycloak répond 201 sans corps : on renvoie la forme normalisée de
+        // ce qu'on a envoyé (la page recharge de toute façon la liste).
+        return ['ok' => true, 'org' => kcEspOrgNormalize($payload), 'error' => ''];
+    }
+}
