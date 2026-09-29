@@ -11,6 +11,9 @@
         GET /admin/realms/{realm}/organizations/{id}
         GET /admin/realms/{realm}/organizations/{id}/members
 
+        POST /admin/realms/{realm}/organizations                    (création)
+        POST /admin/realms/{realm}/organizations/{id}/members/invite-user
+
    ⚠️ CE FICHIER N'UTILISE PAS LE CLIENT KEYCLOAK DU PORTAIL GESTION.
    Le portail gestion s'authentifie sur SON realm (KEYCLOAK_ISSUER,
    KEYCLOAK_CLIENT_ID) ; les entreprises, elles, vivent dans le realm de
@@ -603,11 +606,12 @@ if (!function_exists('kcEspOrganizationMembers')) {
 /* ======================= Création d'une organisation =================== */
 
 /**
- * POST JSON sur l'Admin REST API du realm ESP-CLI. Même contrat que
- * kcEspAdminGet() : ne lève jamais, renvoie { status, body, error }.
+ * POST sur l'Admin REST API du realm ESP-CLI, en JSON (défaut) ou en
+ * x-www-form-urlencoded ($asForm). Même contrat que kcEspAdminGet() :
+ * ne lève jamais, renvoie { status, body, error }.
  */
 if (!function_exists('kcEspAdminPost')) {
-    function kcEspAdminPost(string $path, array $payload): array
+    function kcEspAdminPost(string $path, array $payload, bool $asForm = false): array
     {
         $problem = kcEspConfigProblem();
         if ($problem !== '') {
@@ -627,10 +631,12 @@ if (!function_exists('kcEspAdminPost')) {
         try {
             $resp = keycloakHttpRequest(kcEspAdminBase() . $path, [
                 CURLOPT_POST       => true,
-                CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                CURLOPT_POSTFIELDS => $asForm
+                    ? http_build_query($payload, '', '&', PHP_QUERY_RFC3986)
+                    : json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                 CURLOPT_HTTPHEADER => [
                     'Accept: application/json',
-                    'Content-Type: application/json',
+                    'Content-Type: ' . ($asForm ? 'application/x-www-form-urlencoded' : 'application/json'),
                     'Authorization: Bearer ' . $bearer,
                 ],
             ]);
@@ -650,7 +656,9 @@ if (!function_exists('kcEspAdminPost')) {
         if ($status === 403) {
             $error .= " — le compte de service n'a pas le rôle « manage-organizations » (realm-management).";
         } elseif ($status === 409) {
-            $error = 'Une entreprise porte déjà ce nom, cet alias ou ce domaine.';
+            $error = !empty($body['errorMessage'])
+                ? (string) $body['errorMessage']
+                : 'Conflit : la ressource existe déjà (nom, alias, domaine ou membre).';
         } elseif (!empty($body['errorMessage'])) {
             $error .= ' — ' . (string) $body['errorMessage'];
         } elseif (!empty($body['error'])) {
@@ -714,5 +722,39 @@ if (!function_exists('kcEspOrganizationCreate')) {
         // Keycloak répond 201 sans corps : on renvoie la forme normalisée de
         // ce qu'on a envoyé (la page recharge de toute façon la liste).
         return ['ok' => true, 'org' => kcEspOrgNormalize($payload), 'error' => ''];
+    }
+}
+
+/* ==================== Ajout d'un membre à une organisation ============== */
+
+/**
+ * Invite une personne dans une organisation par e-mail
+ * (POST /organizations/{id}/members/invite-user). Keycloak envoie un lien
+ * d'invitation si le compte existe déjà, un lien d'inscription sinon — le
+ * SMTP du realm ESP-CLI doit donc être configuré.
+ *
+ * @return array{ok:bool, error:string}
+ */
+if (!function_exists('kcEspOrganizationInviteMember')) {
+    function kcEspOrganizationInviteMember(string $orgId, string $email, string $firstName = '', string $lastName = ''): array
+    {
+        $orgId = trim($orgId);
+        $email = trim($email);
+        if ($orgId === '') {
+            return ['ok' => false, 'error' => 'Organisation non identifiée.'];
+        }
+        if ($email === '') {
+            return ['ok' => false, 'error' => "L'adresse e-mail est obligatoire."];
+        }
+
+        $form = ['email' => $email];
+        if (trim($firstName) !== '') $form['firstName'] = trim($firstName);
+        if (trim($lastName) !== '')  $form['lastName']  = trim($lastName);
+
+        $r = kcEspAdminPost('/organizations/' . rawurlencode($orgId) . '/members/invite-user', $form, true);
+        if ($r['error'] !== '') {
+            return ['ok' => false, 'error' => $r['error']];
+        }
+        return ['ok' => true, 'error' => ''];
     }
 }

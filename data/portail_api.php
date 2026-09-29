@@ -3297,6 +3297,36 @@ try {
             send_json(200, ['ok' => true, 'org' => $created['org']]);
         }
 
+        // Ajout d'un membre depuis /entreprises (« Ajouter un membre + ») :
+        // invitation par e-mail via Keycloak. POST + X-CSRF-Token.
+        case 'org.invite_member': {
+            require_post();
+            csrf_check();
+            require_once __DIR__ . '/../include/keycloak_esp_client.php';
+
+            $orgId = trim((string)($_POST['org_id'] ?? ''));
+            if ($orgId === '') {
+                send_json(400, ['ok' => false, 'error' => 'Organisation non identifiée.']);
+            }
+            $email = trim((string)($_POST['email'] ?? ''));
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                send_json(400, ['ok' => false, 'error' => 'Adresse e-mail invalide.']);
+            }
+            $firstName = mb_substr(trim((string)($_POST['first_name'] ?? '')), 0, 255);
+            $lastName  = mb_substr(trim((string)($_POST['last_name'] ?? '')), 0, 255);
+
+            $invited = kcEspOrganizationInviteMember($orgId, $email, $firstName, $lastName);
+            if (!$invited['ok']) {
+                send_json(200, [
+                    'ok'    => false,
+                    'code'  => 502,
+                    'error' => $invited['error'] !== '' ? $invited['error'] : 'Invitation impossible.',
+                ]);
+            }
+
+            send_json(200, ['ok' => true]);
+        }
+
         case 'org.members': {
             require_once __DIR__ . '/../include/keycloak_esp_client.php';
 

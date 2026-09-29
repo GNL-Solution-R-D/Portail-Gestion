@@ -100,6 +100,11 @@ $searchPlaceholder = t('Rechercher une entreprise…');
     .member-main{min-width:0;flex:1 1 auto;}
     .member-main b{display:block;font-size:.875rem;font-weight:600;}
     .member-main span{display:block;font-size:.8125rem;color:var(--muted-foreground, #64748b);}
+    .member-add-row{display:flex;align-items:center;padding:.3rem 0 0;}
+    .member-add{display:inline-flex;align-items:center;gap:.35rem;height:1.75rem;padding:0 .5rem;margin-left:-.5rem;border:none;border-radius:3px;background:none;font:inherit;font-size:.8125rem;font-weight:500;color:var(--muted-foreground, #64748b);cursor:pointer;transition:color 120ms ease, background-color 120ms ease;}
+    .member-add:hover{color:inherit;background:color-mix(in srgb, currentColor 8%, transparent);}
+    @media (prefers-reduced-motion: reduce){ .member-add{transition:none;} }
+    .member-add-note{margin-left:.5rem;font-size:.8125rem;color:#15803d;}
     .member-meta{font-size:.8125rem;color:var(--muted-foreground, #64748b);text-align:right;flex:none;}
 
     .org-links{display:flex;align-items:center;gap:.35rem;}
@@ -260,6 +265,39 @@ $searchPlaceholder = t('Rechercher une entreprise…');
     </div>
   </div>
 
+  <!-- Modale : ajouter un membre à une entreprise -->
+  <div id="memberAddModal" class="tm-modal" role="dialog" aria-modal="true" aria-labelledby="memberAddTitle">
+    <div class="tm-dialog" style="max-width:28rem">
+      <form id="memberAddForm" class="p-6" novalidate>
+        <h2 id="memberAddTitle" class="text-lg font-semibold"><?= t('Ajouter un membre') ?></h2>
+        <p id="memberAddSub" class="text-sm text-muted-foreground mt-1"></p>
+
+        <div class="tm-grid mt-5">
+          <div class="tm-field tm-span">
+            <label for="memberEmail"><?= t('E-mail') ?> *</label>
+            <input type="email" id="memberEmail" name="email" required maxlength="255" autocomplete="off">
+          </div>
+          <div class="tm-field">
+            <label for="memberFirst"><?= t('Prénom') ?></label>
+            <input type="text" id="memberFirst" name="first_name" maxlength="255" autocomplete="off">
+          </div>
+          <div class="tm-field">
+            <label for="memberLast"><?= t('Nom') ?></label>
+            <input type="text" id="memberLast" name="last_name" maxlength="255" autocomplete="off">
+          </div>
+        </div>
+        <p class="tm-hint mt-3"><?= t('Une invitation est envoyée par e-mail : lien d’invitation si le compte existe, lien d’inscription sinon.') ?></p>
+
+        <div id="memberAddError" class="tm-error mt-4" role="alert" hidden></div>
+
+        <div class="mt-6 flex justify-end gap-2">
+          <button type="button" class="tm-btn" data-close><?= t('Annuler') ?></button>
+          <button type="submit" class="tm-btn tm-btn--primary" id="memberAddSubmit"><?= t('Envoyer l’invitation') ?></button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Entreprises : organisations Keycloak de l'espace client via
        data/portail_api.php ?action=org.list (include/keycloak_esp_client.php
        → Admin REST du realm ESP-CLI). Lecture seule.
@@ -276,6 +314,11 @@ $searchPlaceholder = t('Rechercher une entreprise…');
       createErr:   <?= json_encode(t('Impossible de créer l’entreprise.'), JSON_UNESCAPED_UNICODE) ?>,
       creating:    <?= json_encode(t('Création…'), JSON_UNESCAPED_UNICODE) ?>,
       created:     <?= json_encode(t('Entreprise créée.'), JSON_UNESCAPED_UNICODE) ?>,
+      addMember:   <?= json_encode(t('Ajouter un membre'), JSON_UNESCAPED_UNICODE) ?>,
+      emailInvalid:<?= json_encode(t('Adresse e-mail invalide.'), JSON_UNESCAPED_UNICODE) ?>,
+      inviting:    <?= json_encode(t('Envoi…'), JSON_UNESCAPED_UNICODE) ?>,
+      inviteErr:   <?= json_encode(t('Impossible d’envoyer l’invitation.'), JSON_UNESCAPED_UNICODE) ?>,
+      invited:     <?= json_encode(t('Invitation envoyée à'), JSON_UNESCAPED_UNICODE) ?>,
       truncated:   <?= json_encode(t('Liste tronquée : seules les premières entreprises sont affichées.'), JSON_UNESCAPED_UNICODE) ?>,
       active:      <?= json_encode(t('Activée'), JSON_UNESCAPED_UNICODE) ?>,
       inactive:    <?= json_encode(t('Désactivée'), JSON_UNESCAPED_UNICODE) ?>,
@@ -466,18 +509,28 @@ $searchPlaceholder = t('Rechercher une entreprise…');
         '</div>';
       }
 
-      function loadMembers(orgId, panel){
+      // Demi-ligne « Ajouter un membre + » sous la liste des membres.
+      function addMemberRow(orgId){
+        return '<div class="member-add-row">' +
+          '<button type="button" class="member-add" data-add-member="' + esc(orgId) + '">' +
+            esc(I18N.addMember || 'Ajouter un membre') +
+            ' <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>' +
+          '</button>' +
+        '</div>';
+      }
+
+      function loadMembers(orgId, panel, force){
         var inner = panel.querySelector('.org-members-inner');
         if (!inner) return;
 
         var cached = state.membersCache[orgId];
-        if (cached === 'loading') return;
-        if (cached) { inner.innerHTML = cached; return; }
+        if (cached === 'loading') return Promise.resolve();
+        if (cached && !force) { inner.innerHTML = cached; return Promise.resolve(); }
 
         state.membersCache[orgId] = 'loading';
         inner.innerHTML = '<p class="text-sm text-muted-foreground">' + esc(I18N.membersLoad || 'Chargement…') + '</p>';
 
-        fetch(API + '?action=org.members&org_id=' + encodeURIComponent(orgId),
+        return fetch(API + '?action=org.members&org_id=' + encodeURIComponent(orgId),
               { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
         .then(function (res){ return res.json().catch(function(){ return null; }).then(function (data){ return { ok: res.ok, data: data }; }); })
         .then(function (r){
@@ -493,6 +546,7 @@ $searchPlaceholder = t('Rechercher une entreprise…');
               ? list.map(memberHtml).join('') +
                 (data.truncated ? '<p class="text-sm text-muted-foreground" style="margin-top:.6rem">' + esc(I18N.membersMore || '') + '</p>' : '')
               : '<p class="text-sm text-muted-foreground">' + esc(I18N.membersNone || '') + '</p>';
+            html += addMemberRow(orgId);
             state.membersCache[orgId] = html;
           }
           inner.innerHTML = html;
@@ -531,6 +585,9 @@ $searchPlaceholder = t('Rechercher une entreprise…');
 
       // Délégation : les lignes sont rendues dynamiquement.
       tbody.addEventListener('click', function (e){
+        var addBtn = e.target.closest ? e.target.closest('[data-add-member]') : null;
+        if (addBtn) { e.preventDefault(); openMemberAdd(addBtn.getAttribute('data-add-member')); return; }
+
         var btn = e.target.closest ? e.target.closest('.org-toggle') : null;
         if (!btn) return;
         e.preventDefault();
@@ -635,6 +692,115 @@ $searchPlaceholder = t('Rechercher une entreprise…');
           .then(function (){
             addSubmit.disabled = false;
             addSubmit.textContent = addLabel;
+          });
+        });
+      }
+
+      // ── Ajouter un membre ──────────────────────────────────────────
+      var mModal  = document.getElementById('memberAddModal');
+      var mForm   = document.getElementById('memberAddForm');
+      var mSub    = document.getElementById('memberAddSub');
+      var mErr    = document.getElementById('memberAddError');
+      var mSubmit = document.getElementById('memberAddSubmit');
+      var mLabel  = mSubmit ? mSubmit.textContent : '';
+      var mOrgId  = '';
+      var mFocus  = null;
+
+      function setMemberError(msg){
+        if (!mErr) return;
+        mErr.textContent = msg || '';
+        mErr.hidden = !msg;
+      }
+      function orgLabel(orgId){
+        for (var i = 0; i < state.orgs.length; i++) {
+          if (state.orgs[i].id === orgId) return state.orgs[i].label || '';
+        }
+        return '';
+      }
+      function openMemberAdd(orgId){
+        if (!mModal || !mForm) return;
+        mOrgId = orgId;
+        mFocus = document.activeElement;
+        mForm.reset();
+        setMemberError('');
+        if (mSub) mSub.textContent = orgLabel(orgId);
+        mModal.classList.add('is-open');
+        var first = document.getElementById('memberEmail');
+        if (first) first.focus();
+      }
+      function closeMemberAdd(){
+        if (!mModal) return;
+        mModal.classList.remove('is-open');
+        if (mFocus && mFocus.focus && document.contains(mFocus)) mFocus.focus();
+      }
+
+      if (mModal) {
+        mModal.addEventListener('click', function (e){
+          if (e.target === mModal || (e.target.closest && e.target.closest('[data-close]'))) closeMemberAdd();
+        });
+      }
+      document.addEventListener('keydown', function (e){
+        if (e.key === 'Escape' && mModal && mModal.classList.contains('is-open')) closeMemberAdd();
+      });
+
+      if (mForm) {
+        mForm.addEventListener('submit', function (e){
+          e.preventDefault();
+          var emailEl = document.getElementById('memberEmail');
+          var email   = emailEl ? emailEl.value.trim() : '';
+          if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            setMemberError(I18N.emailInvalid || 'Adresse e-mail invalide.');
+            if (emailEl) emailEl.focus();
+            return;
+          }
+          setMemberError('');
+
+          var body = new URLSearchParams();
+          body.append('org_id', mOrgId);
+          body.append('email', email);
+          body.append('first_name', (document.getElementById('memberFirst') || {}).value || '');
+          body.append('last_name',  (document.getElementById('memberLast')  || {}).value || '');
+
+          mSubmit.disabled = true;
+          mSubmit.textContent = I18N.inviting || '…';
+
+          var orgId = mOrgId;
+          fetch(API + '?action=org.invite_member', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'X-CSRF-Token': window.ORG_CSRF || ''
+            },
+            body: body.toString()
+          })
+          .then(function (res){ return res.json().catch(function(){ return null; }).then(function (data){ return { ok: res.ok, data: data }; }); })
+          .then(function (r){
+            var data = r.data;
+            if (!r.ok || !data || !data.ok) {
+              setMemberError((data && data.error) ? data.error : (I18N.inviteErr || 'Erreur.'));
+              return;
+            }
+            closeMemberAdd();
+            // Recharge les membres, puis confirme à côté du bouton (non mis en cache).
+            var panel = tbody.querySelector('tr[data-org-members="' + sel(orgId) + '"]');
+            if (!panel) return;
+            var notice = (I18N.invited || 'Invitation envoyée à') + ' ' + email + '.';
+            (loadMembers(orgId, panel, true) || Promise.resolve()).then(function (){
+              var row = panel.querySelector('.member-add-row');
+              if (!row) return;
+              var span = document.createElement('span');
+              span.className = 'member-add-note';
+              span.setAttribute('role', 'status');
+              span.textContent = notice;
+              row.appendChild(span);
+            });
+          })
+          .catch(function (){ setMemberError(I18N.inviteErr || 'Erreur.'); })
+          .then(function (){
+            mSubmit.disabled = false;
+            mSubmit.textContent = mLabel;
           });
         });
       }
