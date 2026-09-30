@@ -60,6 +60,8 @@
   };
 
   var hosts = {};
+  // Déclaré AVANT le premier load() : sinon la valeur vaut encore undefined.
+  var EMPTY_HTML = '<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Aucun service.</div>';
   var found = false;
   Object.keys(TARGETS).forEach(function (key) {
     var el = document.getElementById(TARGETS[key]);
@@ -137,7 +139,7 @@
         } else {
           // Aucun service dans cette catégorie : le dépliant reste affiché.
           hosts[key].innerHTML = EMPTY_HTML;
-          showBlock(key, true);
+          showBlock(key, false);
         }
       });
 
@@ -371,15 +373,13 @@
     return hosts[key].closest('[data-slot="collapsible"]');
   }
 
-  var EMPTY_HTML = '<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Aucun service.</div>';
-
   // Les dépliants sont toujours affichés ; data-services-empty marque ceux
   // qui n'ont aucun service (utile pour un style éventuel).
-  function showBlock(key, visible) {
+  function showBlock(key, hasServices) {
     var block = blockOf(key);
     if (!block) return;
     block.hidden = false;
-    if (visible && hosts[key].innerHTML !== EMPTY_HTML) block.removeAttribute('data-services-empty');
+    if (hasServices) block.removeAttribute('data-services-empty');
     else block.setAttribute('data-services-empty', 'true');
   }
 
@@ -400,7 +400,7 @@
         showBlock(key, true);
       } else {
         hosts[key].innerHTML = '<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Indisponible.</div>';
-        showBlock(key, true);
+        showBlock(key, false);
       }
     });
   }
