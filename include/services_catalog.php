@@ -797,7 +797,7 @@ function servicesCatalogBuildAll(string $onlyOrg = ''): array
         }
         $catalog[$slug] = [
             'name'          => servicesCatalogValue($row, ['name', 'nom', 'label', 'libelle', 'titre'], $slug),
-            'menu'          => strtolower(servicesCatalogValue($row, ['esp_cli_menu_name', 'menu', 'menu_name'])),
+            'menu'          => servicesCatalogResolveMenu(servicesCatalogValue($row, ['esp_cli_menu_name', 'menu', 'menu_name'])),
             'type'          => servicesCatalogValue($row, ['type']),
             'provider_type' => strtolower(servicesCatalogValue($row, ['provider_type'])),
         ];
@@ -862,22 +862,24 @@ function servicesCatalogBuildAll(string $onlyOrg = ''): array
                 if ($rowRef !== '' && strcasecmp($rowRef, $ref) !== 0) {
                     continue;
                 }
+                // Portail GESTION : TOUS les services, quel que soit leur statut
+                // (le statut reste affiché en badge dans le menu).
                 $status = strtolower(servicesCatalogValue($row, ['status', 'statut', 'state']));
-                if (!in_array($status, servicesCatalogStatuses(), true)) {
-                    continue;
-                }
                 $slug = servicesCatalogValue($row, ['slug', 'produit', 'product', 'code']);
                 if ($slug === '') {
                     continue;
                 }
 
+                // Produit absent du catalogue ou sans dépliant reconnu : rangé
+                // dans « Services Spécifiques » (other) plutôt qu'ignoré ; le slug
+                // reste signalé dans « unmapped » pour corriger le catalogue.
                 $meta = $catalog[$slug] ?? null;
                 $menu = $meta['menu'] ?? '';
                 if (!in_array($menu, $menuKeys, true)) {
                     if (!in_array($slug, $unmapped, true)) {
                         $unmapped[] = $slug;
                     }
-                    continue;
+                    $menu = 'other';
                 }
 
                 $uid = servicesCatalogValue($row, ['uid', 'product_uid', 'item_uid']);
@@ -931,11 +933,58 @@ function servicesCatalogBuildAll(string $onlyOrg = ''): array
     ];
 }
 
+/**
+ * Portail GESTION — clé de dépliant pour une valeur brute de
+ * product.esp_cli_menu_name, tolérante à la casse, aux accents et aux
+ * libellés courants (« Services Cloud », « VPS », « Serveurs dédiés »…).
+ * Renvoie '' si rien ne correspond.
+ */
+function servicesCatalogResolveMenu(string $raw): string
+{
+    $v = strtolower(trim($raw));
+    if ($v === '') {
+        return '';
+    }
+    if (function_exists('iconv')) {
+        $t = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $v);
+        if (is_string($t) && $t !== '') {
+            $v = strtolower($t);
+        }
+    }
+    $v = trim((string)preg_replace('/[^a-z0-9]+/', ' ', $v));
+    if (in_array($v, servicesCatalogMenus(), true)) {
+        return $v;
+    }
+
+    $aliases = [
+        'bm'    => ['bm', 'baremetal', 'bare metal', 'dedie', 'dedies', 'dedicated', 'serveur dedie', 'serveurs dedies'],
+        'vm'    => ['vm', 'vms', 'vps', 'virtual', 'virtualise', 'virtualises', 'serveur virtualise', 'serveurs virtualises'],
+        'cloud' => ['cloud', 'services cloud', 'service cloud'],
+        'web'   => ['web', 'services web', 'service web', 'site', 'hebergement', 'hosting'],
+        'other' => ['other', 'others', 'autre', 'autres', 'specifique', 'specifiques', 'specific', 'services specifiques'],
+    ];
+    foreach ($aliases as $key => $words) {
+        if (in_array($v, $words, true)) {
+            return $key;
+        }
+    }
+    // Correspondance partielle (ex. « menu_serveurs_dedies »).
+    foreach ($aliases as $key => $words) {
+        foreach ($words as $w) {
+            if (strlen($w) >= 4 && strpos($v, $w) !== false) {
+                return $key;
+            }
+        }
+    }
+    return '';
+}
+
 /** Services de tous les clients, mis en cache en session (SERVICES_CATALOG_ALL_TTL). */
 function servicesCatalogFetchAll(bool $force = false, string $onlyOrg = ''): array
 {
     $cache = $_SESSION[SERVICES_CATALOG_ALL_CACHE_KEY] ?? null;
-    $scope = $onlyOrg !== '' ? strtolower($onlyOrg) : '*';
+    // « v2 » : invalide les caches construits avec l'ancien filtrage.
+    $scope = 'v2:' . ($onlyOrg !== '' ? strtolower($onlyOrg) : '*');
 
     if (
         !$force
