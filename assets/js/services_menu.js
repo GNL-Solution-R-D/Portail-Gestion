@@ -322,6 +322,10 @@
     var statusKey   = status.toLowerCase();
     var suspended   = statusKey === 'suspended';
     var deploying   = statusKey === 'deployment';
+    // Portail gestion : tous les statuts sont listés ; les services arrêtés
+    // (résiliés, annulés, expirés…) sont atténués avec un badge rouge.
+    var ended       = /^(cancel|terminat|resili|expir|closed|ferme|deleted|supprim|refund|rembours)/.test(statusKey);
+    var pending     = /^(pending|attente|waiting|unpaid|impaye|draft|brouillon|new|nouveau)/.test(statusKey);
 
     var icon =
       '<span class="mr-0.5 grid shrink-0 place-items-center">' +
@@ -337,6 +341,8 @@
       ? '<span data-service-badge class="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ' +
           (suspended ? 'bg-amber-100 text-amber-700'
             : deploying ? 'bg-orange-100 text-orange-700'
+            : ended ? 'bg-red-100 text-red-700'
+            : pending ? 'bg-sky-100 text-sky-700'
             : 'bg-secondary text-muted-foreground') + '">' +
           escapeHtml(status) +
         '</span>'
@@ -360,7 +366,7 @@
 
     var inner =
       icon +
-      '<span class="font-medium truncate min-w-0' + (suspended ? ' opacity-70' : '') + '">' + escapeHtml(name) + '</span>' +
+      '<span class="font-medium truncate min-w-0' + ((suspended || ended) ? ' opacity-70' : '') + '">' + escapeHtml(name) + '</span>' +
       badge;
 
     return href
