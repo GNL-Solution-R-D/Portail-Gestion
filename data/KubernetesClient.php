@@ -344,7 +344,7 @@ class KubernetesClient
         $raw = curl_exec($ch);
         $err = curl_error($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        unset($ch); // curl_close() : sans effet depuis PHP 8.0, déprécié en 8.5
 
         if ($raw === false) {
             throw new RuntimeException('Erreur cURL: ' . $err);

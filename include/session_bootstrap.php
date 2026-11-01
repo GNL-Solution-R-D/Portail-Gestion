@@ -2,6 +2,14 @@
 
 declare(strict_types=1);
 
+// Production : aucun message PHP (Deprecated, Warning…) dans la page. Affiché
+// avant les en-têtes, il casse session_regenerate_id() et les redirections
+// (connexion). Les erreurs vont dans le journal ; APP_DEBUG=1 les réaffiche.
+if (getenv('APP_DEBUG') !== '1') {
+    @ini_set('display_errors', '0');
+    @ini_set('log_errors', '1');
+}
+
 /**
  * include/session_bootstrap.php
  *

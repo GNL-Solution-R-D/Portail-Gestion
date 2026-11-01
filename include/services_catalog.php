@@ -702,7 +702,7 @@ function servicesCatalogMultiCall(array $payloads, int $timeout = 15): array
                 'error'  => $errno !== 0 ? 'Connexion n8n impossible : ' . curl_error($ch) : '',
             ];
             curl_multi_remove_handle($mh, $ch);
-            curl_close($ch);
+            unset($ch); // curl_close() : sans effet depuis PHP 8.0, déprécié en 8.5
         }
         curl_multi_close($mh);
     }

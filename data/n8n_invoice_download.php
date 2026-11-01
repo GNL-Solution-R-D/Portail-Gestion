@@ -116,7 +116,7 @@ function http_get_raw(string $url, ?string $token, int $timeout = 20): array
         $err    = curl_error($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         $ctype  = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-        curl_close($ch);
+        unset($ch); // curl_close() : sans effet depuis PHP 8.0, déprécié en 8.5
         if ($errno !== 0) {
             throw new RuntimeException('Connexion n8n impossible : ' . $err);
         }

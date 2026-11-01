@@ -71,7 +71,7 @@ function callN8n(array $params): array
     $raw  = curl_exec($ch);
     $err  = curl_error($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    curl_close($ch);
+    unset($ch); // curl_close() : sans effet depuis PHP 8.0, déprécié en 8.5
 
     if ($raw === false || $err !== '') {
         throw new RuntimeException('Webhook n8n injoignable : ' . $err);

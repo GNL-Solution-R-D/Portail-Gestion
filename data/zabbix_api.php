@@ -115,7 +115,7 @@ if (!function_exists('zabbixApiHttpRequest')) {
         $responseBody = curl_exec($ch);
         $curlError = curl_error($ch);
         $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        unset($ch); // curl_close() : sans effet depuis PHP 8.0, déprécié en 8.5
 
         if ($responseBody === false) {
             throw new RuntimeException('Erreur réseau Zabbix: ' . $curlError, 500);
