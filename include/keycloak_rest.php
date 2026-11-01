@@ -365,105 +365,120 @@ if (!function_exists('kcRestSendPasswordResetEmail')) {
 }
 
 /* ==================== Gabarit visuel (charte GNL) ===================
-   Carte centrée, police Manrope, vert #6c9400 / teal #009494 / ink #353535. */
+   Panneau marine + formulaire, police Manrope locale, marine #141a33 / vert #5cd98b. */
 if (!function_exists('gnl_auth_head')) {
     function gnl_auth_head(string $title, string $active = 'connexion'): void
     {
         header('Content-Type: text/html; charset=UTF-8');
-        $logo = gnl_e((string) config('KEYCLOAK_LOGO_URL', 'https://gnl-solution.fr/wp-content/uploads/2025/04/Logo-GNL3.png'));
         ?><!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title><?php echo gnl_e($title); ?> — GNL Solution</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="icon" href="https://gnl-solution.fr/wp-content/uploads/2025/12/cropped-Sans-titre37-32x32.png" sizes="32x32">
+<meta name="theme-color" content="#141a33">
+<title><?php echo gnl_e($title); ?> — Portail Gestion GNL Solution</title>
+<link rel="preload" href="/assets/gnl/fonts/Manrope-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="icon" href="/assets/gnl/img/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/assets/gnl/img/favicon-180.png">
 <style>
+@font-face{font-family:Manrope;font-style:normal;font-weight:200 800;font-display:swap;src:url(/assets/gnl/fonts/Manrope-latin.woff2) format("woff2")}
 :root{
-  --gnl-green:#6c9400; --gnl-green-d:#5c7f00; --gnl-teal:#009494; --gnl-ink:#353535;
-  --gnl-line:#e4e6e2; --gnl-soft:#f4f6f1; --gnl-danger:#c0392b; --gnl-ok:#2e7d32;
+  --navy:#141a33; --navy-2:#232b52; --navy-3:#32385e; --green:#5cd98b; --green-d:#1f7a4a;
+  --ink:#141a33; --mute:#5e6684; --line:#c5cbd8; --line-2:#e3e6ee; --page:#f4f6fa;
+  --danger:#b42318; --ok:#1f7a4a;
+  /* alias conservés pour les pages qui les utilisent en ligne */
+  --gnl-green:#141a33; --gnl-teal:#1f7a4a; --gnl-line:#c5cbd8;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
-body{
-  font-family:'Manrope',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-  color:var(--gnl-ink); line-height:1.45;
-  background:
-    radial-gradient(1200px 500px at 15% -10%, color-mix(in srgb,var(--gnl-green) 10%, transparent), transparent 60%),
-    radial-gradient(1000px 480px at 110% 10%, color-mix(in srgb,var(--gnl-teal) 12%, transparent), transparent 55%),
-    #f3f4f1;
-  min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
-  padding:2.2rem 1rem;
-}
-.gnl-auth{width:100%; max-width:440px}
-.gnl-auth-logo{display:block; text-align:center; margin:0 auto 1.1rem}
-.gnl-auth-logo img{height:56px; width:auto}
-.gnl-card{
-  background:#fff; border:1px solid var(--gnl-line); border-radius:16px;
-  padding:1.9rem 1.9rem 1.7rem; box-shadow:0 18px 50px rgba(20,30,15,.08);
-}
-.gnl-card h1{font-size:1.4rem; font-weight:700; margin:.1rem 0 .25rem; letter-spacing:-.2px}
-.gnl-card .sub{margin:0 0 1.35rem; font-size:.92rem; color:#6a6f66}
-.gnl-field{margin-bottom:.95rem}
-label{display:block; font-size:.82rem; font-weight:600; margin:0 0 .35rem; color:#4a4f46}
-.gnl-in{
-  width:100%; border:1px solid var(--gnl-line); border-radius:10px;
-  padding:.72rem .85rem; font:inherit; font-size:.96rem; background:#fff; color:inherit;
-  transition:border-color .15s, box-shadow .15s;
-}
-.gnl-in:focus{outline:none; border-color:var(--gnl-green); box-shadow:0 0 0 3px color-mix(in srgb,var(--gnl-green) 22%, transparent)}
-.gnl-in::placeholder{color:#a7aca1}
+body{font:15px/22px Manrope,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:var(--page);min-height:100vh;display:flex;flex-wrap:wrap;align-items:stretch}
+a{color:var(--green-d)}
+.gnl-aside{flex:1 1 420px;max-width:100%;padding:40px 48px;background:var(--navy);color:#fff;display:flex;flex-direction:column;gap:40px}
+.gnl-aside img{width:210px;height:auto;display:block;margin-left:-12px}
+.gnl-aside .k{margin:0;display:flex;align-items:center;gap:10px;font-size:12px;font-weight:700;letter-spacing:.2em;color:var(--green)}
+.gnl-aside h2{margin:0;font-size:38px;line-height:44px;font-weight:800;max-width:460px}
+.gnl-aside ul{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:14px;color:#c5cbd8;max-width:460px}
+.gnl-aside li{display:flex;gap:12px;align-items:baseline}
+.gnl-aside .bottom{margin-top:auto;display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13px;color:#c5cbd8}
+.gnl-aside .bottom a{color:#c5cbd8;text-decoration:none}
+.gnl-aside .bottom a:hover{color:#fff}
+.gnl-aside .badge{align-self:flex-start;padding:4px 10px;border-radius:3px;background:var(--green);color:var(--navy);font-size:11px;font-weight:800;letter-spacing:.14em}
+.gnl-aside .notice{margin:auto 0 0;display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--navy-3);border-radius:3px;background:var(--navy-2);color:#c5cbd8;font-size:13px;line-height:19px}
+.gnl-aside .notice svg{flex:none}
+.gnl-aside .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:8px}
+.gnl-auth{flex:1 1 520px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px}
+.gnl-card{width:100%;max-width:420px}
+.gnl-card h1{font-size:30px;line-height:38px;font-weight:800;margin:0 0 6px}
+.gnl-card .sub{margin:0 0 28px;color:var(--mute)}
+.gnl-field{margin-bottom:18px}
+label{display:block;font-size:13px;font-weight:700;margin:0 0 6px;color:var(--ink)}
+.gnl-in{width:100%;height:46px;border:1px solid var(--line);border-radius:3px;padding:0 14px;font:inherit;background:#fff;color:inherit;transition:border-color .15s,box-shadow .15s}
+.gnl-in:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(92,217,139,.35)}
+.gnl-in::placeholder{color:#9aa1b8}
 .gnl-pass{position:relative}
-.gnl-pass .gnl-in{padding-right:3.2rem}
-.gnl-eye{position:absolute; right:.55rem; top:50%; transform:translateY(-50%); border:none; background:none; cursor:pointer; color:#8a8f85; padding:.3rem; line-height:0; border-radius:7px}
-.gnl-eye:hover{color:var(--gnl-ink)}
-.gnl-row-between{display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin:-.15rem 0 1.1rem}
-.gnl-check{display:flex; align-items:flex-start; gap:.55rem; font-size:.85rem; color:#4a4f46; cursor:pointer; user-select:none}
-.gnl-check input{margin:.15rem 0 0; accent-color:var(--gnl-green); flex:none}
-.gnl-link{color:var(--gnl-teal); text-decoration:none; font-size:.85rem; font-weight:600}
+.gnl-pass .gnl-in{padding-right:48px}
+.gnl-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;color:var(--mute);padding:6px;line-height:0;border-radius:3px}
+.gnl-eye:hover{color:var(--ink)}
+.gnl-row-between{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-4px 0 20px}
+.gnl-check{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500;color:var(--ink);cursor:pointer;user-select:none;margin:0}
+.gnl-check input{margin:0;accent-color:var(--green-d);flex:none;width:16px;height:16px}
+.gnl-link{color:var(--green-d);text-decoration:none;font-size:14px;font-weight:700}
 .gnl-link:hover{text-decoration:underline}
-.gnl-btn{
-  display:block; width:100%; border:none; cursor:pointer; margin-top:.35rem;
-  background:var(--gnl-green); color:#fff; border-radius:11px;
-  padding:.85rem 1rem; font:inherit; font-weight:700; font-size:1rem;
-  transition:filter .15s, transform .02s;
-}
-.gnl-btn:hover{filter:brightness(1.05)}
-.gnl-btn:active{transform:translateY(1px)}
-.gnl-btn[disabled]{opacity:.6; cursor:progress}
-.gnl-alt{margin-top:1.25rem; text-align:center; font-size:.9rem; color:#5c6157}
-.gnl-alt a{color:var(--gnl-teal); font-weight:700; text-decoration:none}
+.gnl-btn{display:block;width:100%;height:48px;border:none;cursor:pointer;background:var(--navy);color:#fff;border-radius:3px;font:inherit;font-weight:700;font-size:15px;transition:background .15s}
+.gnl-btn:hover{background:var(--navy-2)}
+.gnl-btn:focus-visible{outline:3px solid var(--green);outline-offset:2px}
+.gnl-btn[disabled]{opacity:.6;cursor:progress}
+.gnl-alt{margin-top:20px;text-align:center;font-size:14px;color:var(--mute)}
+.gnl-alt a{color:var(--green-d);font-weight:700;text-decoration:none}
 .gnl-alt a:hover{text-decoration:underline}
-.gnl-msg{border-radius:11px; padding:.75rem .9rem; font-size:.88rem; margin:0 0 1.15rem; display:flex; gap:.55rem; align-items:flex-start}
-.gnl-msg svg{flex:none; margin-top:1px}
-.gnl-msg.err{background:color-mix(in srgb,var(--gnl-danger) 8%, #fff); border:1px solid color-mix(in srgb,var(--gnl-danger) 35%, transparent); color:#8e2a1e}
-.gnl-msg.ok{background:color-mix(in srgb,var(--gnl-ok) 8%, #fff); border:1px solid color-mix(in srgb,var(--gnl-ok) 35%, transparent); color:#1f6323}
-.gnl-hint{font-size:.78rem; color:#8a8f85; margin:.3rem 0 0}
-.gnl-sep{display:flex; align-items:center; gap:.8rem; color:#a7aca1; font-size:.78rem; margin:1.15rem 0 .3rem}
-.gnl-sep::before,.gnl-sep::after{content:""; height:1px; background:var(--gnl-line); flex:1}
-.gnl-foot{margin-top:1.4rem; text-align:center; font-size:.76rem; color:#9aa093}
-.gnl-foot a{color:inherit}
-@media(max-width:480px){ .gnl-card{padding:1.5rem 1.25rem} }
+.gnl-msg{border-radius:3px;padding:12px 14px;font-size:14px;margin:0 0 20px;display:flex;gap:10px;align-items:flex-start}
+.gnl-msg svg{flex:none;margin-top:2px}
+.gnl-msg.err{background:#fef3f2;border:1px solid #fecdca;color:var(--danger)}
+.gnl-msg.ok{background:#ecfdf3;border:1px solid #abefc6;color:var(--ok)}
+.gnl-hint{font-size:13px;color:var(--mute);margin:6px 0 0}
+.gnl-sep{display:flex;align-items:center;gap:12px;color:var(--mute);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin:24px 0 12px}
+.gnl-sep::before,.gnl-sep::after{content:"";height:1px;background:var(--line-2);flex:1}
+.gnl-foot{margin-top:32px;text-align:center;font-size:13px;color:var(--mute)}
+.gnl-foot a{color:var(--mute)}
+@media(max-width:900px){
+  .gnl-aside .notice{display:none}
+  .gnl-aside{flex-basis:100%;padding:24px;gap:20px}
+  .gnl-aside img{width:160px}
+  .gnl-aside h2{font-size:24px;line-height:30px}
+  .gnl-aside ul,.gnl-aside .bottom{display:none}
+  .gnl-auth{padding:32px 16px 40px}
+}
 </style>
 </head>
 <body>
+<aside class="gnl-aside">
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <a href="/" aria-label="GNL Solution"><img src="/assets/gnl/img/logo-gnl-marine.svg" alt="GNL Solution"></a>
+    <span class="badge">PORTAIL GESTION</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:18px">
+    <p class="k"><svg aria-hidden="true" width="9" height="16" viewBox="0 0 22 40"><path d="M13 0h9L9 40H0z" fill="#5cd98b"/></svg>ESPACE DU PERSONNEL</p>
+    <h2>Clients, services et support, sur un seul écran.</h2>
+    <ul>
+      <li><svg aria-hidden="true" width="9" height="16" viewBox="0 0 22 40"><path d="M13 0h9L9 40H0z" fill="#5cd98b"/></svg><span>Suivez les tickets et répondez au nom du support.</span></li>
+      <li><svg aria-hidden="true" width="9" height="16" viewBox="0 0 22 40"><path d="M13 0h9L9 40H0z" fill="#5cd98b"/></svg><span>Pilotez les services de toutes les entreprises clientes.</span></li>
+      <li><svg aria-hidden="true" width="9" height="16" viewBox="0 0 22 40"><path d="M13 0h9L9 40H0z" fill="#5cd98b"/></svg><span>Gardez un œil sur la facturation, la boutique et les serveurs DNS.</span></li>
+    </ul>
+  </div>
+  <p class="notice"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5cd98b" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Accès réservé au personnel de GNL Solution. Chaque connexion est journalisée.</p>
+</aside>
 <main class="gnl-auth">
-  <a class="gnl-auth-logo" href="/" aria-label="GNL Solution"><img src="<?php echo $logo; ?>" alt="GNL Solution"></a>
   <div class="gnl-card">
 <?php
     }
 }
-
 if (!function_exists('gnl_auth_foot')) {
     function gnl_auth_foot(): void
     {
         ?>
   </div>
-  <p class="gnl-foot">Espace sécurisé GNL Solution &middot; <a href="/">Retour au site</a></p>
+  <p class="gnl-foot">GNL Solution &middot; Portail de gestion &middot; <a href="https://gnl-solution.com/cgu">CGU</a></p>
 </main>
 <script>
 document.addEventListener('click', function(e){
@@ -486,7 +501,6 @@ document.querySelectorAll('form[data-gnl-auth]').forEach(function(f){
 <?php
     }
 }
-
 if (!function_exists('gnl_icon')) {
     function gnl_icon(string $type): string
     {

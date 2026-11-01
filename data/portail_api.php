@@ -592,6 +592,11 @@ function documentationNormalize(array $row): array
         'content'      => $content,
         'content_html' => $contentHtml,
         'updated_at'   => documentationDate($row),
+        // Rédaction (page /documentation du Portail Gestion) :
+        'content_raw'  => gs_clean_html((string) $contentRaw),
+        'status'       => in_array(strtolower((string) documentationFirstValue($row, ['status', 'statut', 'state'])), ['draft', 'brouillon'], true) ? 'draft' : 'published',
+        'read_time'    => (int) documentationFirstValue($row, ['read_time', 'reading_time', 'temps_lecture']),
+        'author'       => (string) documentationFirstValue($row, ['author', 'auteur', 'updated_by']),
     ];
 }
 
@@ -1896,6 +1901,167 @@ $sessionStructure = trim((string)(
 ));
 
 // ══════════════════════════════════════════════════════════════════════════════
+//  Aides Portail Gestion : boutique, documentation, maintenances
+// ══════════════════════════════════════════════════════════════════════════════
+function gs_bool($v): bool
+{
+    return in_array(strtolower(trim((string) $v)), ['1', 'true', 'on', 'yes', 'oui'], true) || $v === true;
+}
+
+function gs_id($v): string
+{
+    $v = trim((string) $v);
+    return preg_match('/^[A-Za-z0-9_.:-]{1,80}$/', $v) ? $v : '';
+}
+
+function gs_slug(string $s): string
+{
+    $s = strtolower(trim($s));
+    $t = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $s);
+    $s = $t !== false ? $t : $s;
+    $s = preg_replace('/[^a-z0-9]+/', '-', $s) ?? '';
+    return substr(trim($s, '-'), 0, 80);
+}
+
+function gs_price($v): float
+{
+    return round(max(0.0, (float) str_replace([',', ' ', '€'], ['.', '', ''], (string) $v)), 2);
+}
+
+/** Option d'article : billing mensuel | unique | inclus. */
+function gs_option_input(array $src): array
+{
+    $name = mb_substr(trim((string) ($src['name'] ?? '')), 0, 120);
+    $billing = in_array($src['billing'] ?? '', ['mensuel', 'unique', 'inclus'], true) ? (string) $src['billing'] : 'mensuel';
+    return [
+        'id'              => gs_id($src['id'] ?? $src['option_id'] ?? ''),
+        'name'            => $name,
+        'slug'            => gs_slug((string) ($src['slug'] ?? '') ?: $name),
+        'price'           => $billing === 'inclus' ? 0.0 : gs_price($src['price'] ?? 0),
+        'billing'         => $billing,
+        'description'     => mb_substr(trim((string) ($src['description'] ?? '')), 0, 400),
+        'default_checked' => gs_bool($src['default_checked'] ?? false),
+    ];
+}
+
+function gs_product_input(array $src): array
+{
+    $name = mb_substr(trim((string) ($src['name'] ?? '')), 0, 160);
+    $limited = gs_bool($src['stock_limited'] ?? false);
+    $opts = json_decode((string) ($src['options'] ?? '[]'), true);
+    $options = [];
+    foreach (is_array($opts) ? $opts : [] as $o) {
+        if (is_array($o) && trim((string) ($o['name'] ?? '')) !== '') {
+            $options[] = gs_option_input($o);
+        }
+    }
+    return [
+        'id'             => gs_id($src['id'] ?? ''),
+        'name'           => $name,
+        'subtitle'       => mb_substr(trim((string) ($src['subtitle'] ?? '')), 0, 200),
+        'slug'           => gs_slug((string) ($src['slug'] ?? '') ?: $name),
+        'category'       => mb_substr(trim((string) ($src['category'] ?? '')), 0, 80),
+        'price'          => gs_price($src['price'] ?? 0),
+        'billing'        => in_array($src['billing'] ?? '', ['mensuel', 'annuel', 'unique'], true) ? (string) $src['billing'] : 'mensuel',
+        'description'    => mb_substr(trim((string) ($src['description'] ?? '')), 0, 2000),
+        'store_showable' => gs_bool($src['store_showable'] ?? false),
+        'stock_limited'  => $limited,
+        'stock'          => $limited ? max(0, (int) ($src['stock'] ?? 0)) : null,
+        'stock_alert'    => max(0, (int) ($src['stock_alert'] ?? 5)),
+        'options'        => $options,
+    ];
+}
+
+/** Ligne n8n → article (noms de colonnes tolérés : voir case product.list). */
+function gs_product_normalize(array $r): array
+{
+    $pick = static function (array $keys, $dflt = null) use ($r) {
+        foreach ($keys as $k) {
+            if (array_key_exists($k, $r) && $r[$k] !== null && $r[$k] !== '') {
+                return $r[$k];
+            }
+        }
+        return $dflt;
+    };
+    $stock   = $pick(['stock', 'stock_restant', 'places'], null);
+    $limited = $pick(['stock_limited', 'stock_limite'], null);
+    $limited = $limited === null ? $stock !== null : gs_bool($limited);
+    $opts = $pick(['options', 'product_options'], []);
+    if (is_string($opts)) {
+        $opts = json_decode($opts, true) ?: [];
+    }
+    $options = [];
+    foreach (is_array($opts) ? $opts : [] as $o) {
+        if (is_array($o)) {
+            $options[] = gs_option_input($o) + ['id' => (string) ($o['id'] ?? '')];
+        }
+    }
+    return [
+        'id'             => (string) $pick(['id', 'uid', 'product_id', 'slug'], ''),
+        'name'           => (string) $pick(['name', 'title', 'product_name'], ''),
+        'subtitle'       => (string) $pick(['subtitle', 'sous_titre', 'tagline'], ''),
+        'slug'           => (string) $pick(['slug'], ''),
+        'category'       => (string) $pick(['category', 'categorie', 'esp_cli_menu_name'], ''),
+        'price'          => (float) $pick(['price', 'prix', 'price_ht'], 0),
+        'billing'        => (string) $pick(['billing', 'facturation', 'interval'], 'mensuel'),
+        'description'    => (string) $pick(['description', 'desc'], ''),
+        'store_showable' => gs_bool($pick(['store_showable', 'visible', 'is_visible'], false)),
+        'stock_limited'  => $limited,
+        'stock'          => $limited && $stock !== null ? (int) $stock : null,
+        'stock_alert'    => (int) $pick(['stock_alert', 'stock_alerte'], 5),
+        'sold'           => (int) $pick(['sold', 'ventes', 'orders_count'], 0),
+        'options'        => $options,
+    ];
+}
+
+/** Garde intertitres, gras, italique, listes, code, liens et images ; retire le reste. */
+function gs_clean_html(string $html): string
+{
+    $html = mb_substr($html, 0, 200000);
+    $html = preg_replace('#<(script|style|iframe|object|template)\b[^>]*>.*?</\1\s*>#is', '', $html) ?? '';
+    $html = strip_tags($html, '<h2><h3><p><br><strong><b><em><i><ul><ol><li><code><pre><a><img><blockquote>');
+    if (trim($html) === '' || !class_exists('DOMDocument')) {
+        return trim($html);
+    }
+    $doc = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $doc->loadHTML('<?xml encoding="UTF-8"><div id="gs-root">' . $html . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+    libxml_clear_errors();
+    $xp = new DOMXPath($doc);
+    foreach ($xp->query('//*') as $el) {
+        /** @var DOMElement $el */
+        $keep = [];
+        if ($el->nodeName === 'a') {
+            $keep = ['href'];
+        } elseif ($el->nodeName === 'img') {
+            $keep = ['src', 'alt'];
+        } elseif ($el->nodeName === 'ol' && $el->getAttribute('data-steps') !== '') {
+            $keep = ['data-steps'];
+        } elseif ($el->getAttribute('id') === 'gs-root') {
+            continue;
+        }
+        foreach (iterator_to_array($el->attributes) as $attr) {
+            if (!in_array($attr->name, $keep, true)) {
+                $el->removeAttribute($attr->name);
+            }
+        }
+        foreach (['href', 'src'] as $u) {
+            if ($el->hasAttribute($u) && !preg_match('#^(https?://|/|\#|mailto:)#i', trim($el->getAttribute($u)))) {
+                $el->removeAttribute($u);
+            }
+        }
+    }
+    $root = $doc->getElementById('gs-root');
+    $out = '';
+    if ($root) {
+        foreach ($root->childNodes as $child) {
+            $out .= $doc->saveHTML($child);
+        }
+    }
+    return trim($out);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 //  Routage : action = "<module>.<sous-action>"
 // ══════════════════════════════════════════════════════════════════════════════
 $action = (string)($_REQUEST['action'] ?? '');
@@ -2152,7 +2318,9 @@ try {
 
             // On demande toujours « documentation.list » à n8n ; le filtrage de
             // garantie se fait ICI. Le champ q est transmis au cas où.
-            $payload = ['action' => 'documentation.list', 'client_id' => $clientId];
+            // include_drafts : le Portail Gestion voit aussi les brouillons
+            // (l'Espace Client, lui, ne doit recevoir que status = published).
+            $payload = ['action' => 'documentation.list', 'client_id' => $clientId, 'include_drafts' => 1];
             if ($query !== '') {
                 $payload['q'] = $query;
             }
@@ -3387,6 +3555,201 @@ try {
                 'members'   => $fetched['members'],
                 'truncated' => (bool)$fetched['truncated'],
             ]);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  BOUTIQUE — articles affichés sur gnl-solution.com et l'Espace Client
+        //  (maquette « Boutique »). Même action n8n product.list que le
+        //  catalogue (include/services_catalog.php) ; champs lus : id, name,
+        //  subtitle, slug, category, price, billing (mensuel|annuel|unique),
+        //  description, store_showable (bool), stock_limited (bool),
+        //  stock (int|null), stock_alert (int), options: [{ id, name, slug,
+        //  price, billing (mensuel|unique|inclus), description, default_checked }].
+        // ─────────────────────────────────────────────────────────────────────
+        case 'product.list': {
+            $resp = n8n_call(['action' => 'product.list', 'client_id' => $clientId]);
+            ensure_ok($resp);
+            $rows = extract_rows($resp['json'], ['products', 'articles', 'items'], ['id', 'slug', 'name']);
+            $products = [];
+            foreach ($rows as $r) {
+                if (is_array($r)) {
+                    $products[] = gs_product_normalize($r);
+                }
+            }
+            send_json(200, ['ok' => true, 'products' => $products, 'count' => count($products)]);
+        }
+
+        case 'product.save': {
+            require_post();
+            csrf_check();
+            $p = gs_product_input($_POST);
+            if ($p['name'] === '') {
+                send_json(400, ['ok' => false, 'error' => 'Le nom de l’article est obligatoire.']);
+            }
+            if ($p['slug'] === '' || !preg_match('/^[a-z0-9][a-z0-9-]{0,79}$/', $p['slug'])) {
+                send_json(400, ['ok' => false, 'error' => 'Slug invalide (minuscules, chiffres et tirets).']);
+            }
+            $resp = n8n_call(['action' => 'product.save', 'client_id' => $clientId] + $p);
+            ensure_ok($resp);
+            $row = is_array($resp['json']) && isset($resp['json']['product']) && is_array($resp['json']['product'])
+                ? gs_product_normalize($resp['json']['product']) : $p;
+            send_json(200, ['ok' => true, 'product' => $row]);
+        }
+
+        case 'product.visibility': {
+            require_post();
+            csrf_check();
+            $id = gs_id($_POST['id'] ?? '');
+            if ($id === '') {
+                send_json(400, ['ok' => false, 'error' => 'Article non identifié.']);
+            }
+            $show = gs_bool($_POST['store_showable'] ?? false);
+            $resp = n8n_call(['action' => 'product.visibility', 'client_id' => $clientId, 'id' => $id, 'store_showable' => $show]);
+            ensure_ok($resp);
+            send_json(200, ['ok' => true, 'id' => $id, 'store_showable' => $show]);
+        }
+
+        case 'product.stock': {
+            require_post();
+            csrf_check();
+            $id = gs_id($_POST['id'] ?? '');
+            if ($id === '') {
+                send_json(400, ['ok' => false, 'error' => 'Article non identifié.']);
+            }
+            $limited = gs_bool($_POST['stock_limited'] ?? false);
+            $stock   = $limited ? max(0, (int) ($_POST['stock'] ?? 0)) : null;
+            $alert   = max(0, (int) ($_POST['stock_alert'] ?? 5));
+            $resp = n8n_call([
+                'action' => 'product.stock', 'client_id' => $clientId, 'id' => $id,
+                'stock_limited' => $limited, 'stock' => $stock, 'stock_alert' => $alert,
+            ]);
+            ensure_ok($resp);
+            send_json(200, ['ok' => true, 'id' => $id, 'stock_limited' => $limited, 'stock' => $stock, 'stock_alert' => $alert]);
+        }
+
+        case 'product.option.add': {
+            require_post();
+            csrf_check();
+            $productId = gs_id($_POST['product_id'] ?? '');
+            $opt = gs_option_input($_POST);
+            if ($productId === '' || $opt['name'] === '') {
+                send_json(400, ['ok' => false, 'error' => 'Article et nom de l’option obligatoires.']);
+            }
+            $resp = n8n_call(['action' => 'product.option.add', 'client_id' => $clientId, 'product_id' => $productId] + $opt);
+            ensure_ok($resp);
+            if (is_array($resp['json']) && isset($resp['json']['option']) && is_array($resp['json']['option'])) {
+                $opt = array_merge($opt, $resp['json']['option']);
+            }
+            send_json(200, ['ok' => true, 'option' => $opt]);
+        }
+
+        case 'product.option.delete': {
+            require_post();
+            csrf_check();
+            $productId = gs_id($_POST['product_id'] ?? '');
+            $optionId  = gs_id($_POST['option_id'] ?? '');
+            if ($productId === '' || $optionId === '') {
+                send_json(400, ['ok' => false, 'error' => 'Option non identifiée.']);
+            }
+            $resp = n8n_call(['action' => 'product.option.delete', 'client_id' => $clientId, 'product_id' => $productId, 'option_id' => $optionId]);
+            ensure_ok($resp);
+            send_json(200, ['ok' => true]);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  DOCUMENTATION — rédaction (alimente /documentation de l'Espace Client)
+        //  status : draft | published. Le contenu HTML est nettoyé ici
+        //  (intertitres, gras, italique, listes, code, liens, images).
+        // ─────────────────────────────────────────────────────────────────────
+        case 'documentation.save': {
+            require_post();
+            csrf_check();
+            $title = mb_substr(trim((string) ($_POST['title'] ?? '')), 0, 200);
+            if ($title === '') {
+                send_json(400, ['ok' => false, 'error' => 'Le titre est obligatoire.']);
+            }
+            $status  = ($_POST['status'] ?? '') === 'published' ? 'published' : 'draft';
+            $content = gs_clean_html((string) ($_POST['content'] ?? ''));
+            $words   = str_word_count(strip_tags($content));
+            $read    = (int) ($_POST['read_time'] ?? 0);
+            $payload = [
+                'action'    => 'documentation.save',
+                'client_id' => $clientId,
+                'id'        => gs_id($_POST['id'] ?? '') ?: null,
+                'title'     => $title,
+                'category'  => mb_substr(trim((string) ($_POST['category'] ?? '')), 0, 80),
+                'summary'   => mb_substr(trim((string) ($_POST['summary'] ?? '')), 0, 400),
+                'content'   => $content,
+                'read_time' => max(1, min(120, $read > 0 ? $read : (int) ceil($words / 200))),
+                'status'    => $status,
+                'author'    => (string) ($user['email'] ?? $user['username'] ?? ''),
+            ];
+            $resp = n8n_call($payload);
+            ensure_ok($resp);
+            $row = is_array($resp['json']) && isset($resp['json']['article']) && is_array($resp['json']['article'])
+                ? $resp['json']['article'] : $payload;
+            unset($row['action'], $row['client_id']);
+            send_json(200, ['ok' => true, 'article' => $row]);
+        }
+
+        case 'documentation.publish':
+        case 'documentation.delete': {
+            require_post();
+            csrf_check();
+            $id = gs_id($_POST['id'] ?? '');
+            if ($id === '') {
+                send_json(400, ['ok' => false, 'error' => 'Article non identifié.']);
+            }
+            $payload = ['action' => $action, 'client_id' => $clientId, 'id' => $id];
+            if ($action === 'documentation.publish') {
+                $payload['status'] = gs_bool($_POST['published'] ?? true) ? 'published' : 'draft';
+            }
+            $resp = n8n_call($payload);
+            ensure_ok($resp);
+            send_json(200, ['ok' => true] + $payload);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  MAINTENANCES — bandeau de l'Espace Client + prévenance des clients
+        // ─────────────────────────────────────────────────────────────────────
+        case 'maintenance.list': {
+            $resp = n8n_call(['action' => 'maintenance.list', 'client_id' => $clientId]);
+            ensure_ok($resp);
+            send_json(200, ['ok' => true, 'maintenances' => extract_rows($resp['json'], ['maintenances', 'items'], ['id', 'title'])]);
+        }
+
+        case 'maintenance.create': {
+            require_post();
+            csrf_check();
+            $title = mb_substr(trim((string) ($_POST['title'] ?? '')), 0, 160);
+            $start = strtotime((string) ($_POST['starts_at'] ?? ''));
+            $end   = strtotime((string) ($_POST['ends_at'] ?? ''));
+            if ($title === '' || !$start || !$end || $end <= $start) {
+                send_json(400, ['ok' => false, 'error' => 'Titre et créneau (fin après début) obligatoires.']);
+            }
+            $services = json_decode((string) ($_POST['services'] ?? '[]'), true);
+            $services = array_values(array_filter(
+                array_map('strval', is_array($services) ? $services : []),
+                static fn (string $s): bool => (bool) preg_match('/^[A-Za-z0-9._-]{1,120}$/', $s)
+            ));
+            $impact = in_array($_POST['impact'] ?? '', ['none', 'restarts', 'outage'], true) ? (string) $_POST['impact'] : 'restarts';
+            $payload = [
+                'action'     => 'maintenance.create',
+                'client_id'  => $clientId,
+                'title'      => $title,
+                'type'       => ($_POST['type'] ?? '') === 'urgente' ? 'urgente' : 'planifiee',
+                'services'   => $services,
+                'starts_at'  => date(DATE_ATOM, $start),
+                'ends_at'    => date(DATE_ATOM, $end),
+                'impact'     => $impact,
+                'message'    => mb_substr(trim((string) ($_POST['message'] ?? '')), 0, 600),
+                'notify'     => gs_bool($_POST['notify'] ?? false),
+                'created_by' => (string) ($user['email'] ?? $user['username'] ?? ''),
+            ];
+            $resp = n8n_call($payload);
+            ensure_ok($resp);
+            unset($payload['action'], $payload['client_id']);
+            send_json(200, ['ok' => true, 'maintenance' => (is_array($resp['json']) && isset($resp['json']['maintenance'])) ? $resp['json']['maintenance'] : $payload]);
         }
 
         default:

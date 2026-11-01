@@ -30,7 +30,7 @@ header('Cache-Control: no-store');
 //  Table conseillée (miroir de domain_buy_name) : deployment_rename
 //    - deployment_name : nom technique Kubernetes (clé)
 //    - display_name    : nom d'affichage saisi par l'utilisateur ('' = réinitialise)
-const N8N_WEBHOOK = 'https://api.gnl-solution.fr/webhook/deployment-rename'; // ⚠️ placeholder
+const N8N_WEBHOOK = 'https://n8n.gnl-cloud.us/webhook/deployment-rename'; // ⚠️ placeholder
 //  Secret partagé optionnel envoyé au webhook (laisser '' si non utilisé).
 const N8N_SECRET  = ''; // ⚠️ à renseigner si votre webhook attend un en-tête d'auth
 

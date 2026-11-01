@@ -85,7 +85,7 @@ $fileName = $baseName . '.pdf';
 // ── Configuration du webhook n8n ─────────────────────────────────────────────
 $N8N_DL_URL = getenv_non_empty('N8N_DATA_INVOICE_DOWNLOAD_URL')
     ?? getenv_non_empty('N8N_DATA_INVOICE_URL')
-    ?? 'https://api.gnl-solution.fr/webhook/data-invoice';
+    ?? 'https://n8n.gnl-cloud.us/webhook/data-invoice';
 $N8N_TOKEN  = getenv_non_empty('N8N_WEBHOOK_TOKEN');
 
 /**

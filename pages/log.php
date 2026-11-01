@@ -44,6 +44,10 @@ if (!is_string($container)) $container = '';
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title><?= t('Logs') ?><?= $deployment ? ' - ' . htmlspecialchars($deployment) : '' ?></title>
   <link rel="stylesheet" href="../assets/styles/connexion-style.css" />
+  <link rel="stylesheet" href="../assets/styles/gnl-portail.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/styles/gnl-portail.css') ?>"/>
+  <link rel="stylesheet" href="../assets/styles/gnl-gestion.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/styles/gnl-gestion.css') ?>"/>
+  <link rel="preload" href="/assets/gnl/fonts/Manrope-latin.woff2" as="font" type="font/woff2" crossorigin/>
+  <link rel="icon" href="/assets/gnl/img/favicon-32.png" sizes="32x32"/>
   <style>
     .wrap{max-width:1200px;margin:0 auto;padding:24px;}
     .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;}

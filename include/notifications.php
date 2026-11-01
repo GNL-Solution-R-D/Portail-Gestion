@@ -23,7 +23,7 @@
  *   POST { action:'create',client_id, type, title, message, link } → { row:{…} }
  *
  * Variables d'environnement :
- *   N8N_DATA_NOTIFICATION_URL  (def. https://api.gnl-solution.fr/webhook/data-notification)
+ *   N8N_DATA_NOTIFICATION_URL  (def. https://n8n.gnl-cloud.us/webhook/data-notification)
  *   N8N_WEBHOOK_TOKEN          (jeton « Header Auth » du webhook, optionnel)
  */
 
@@ -46,7 +46,7 @@ if (!function_exists('notif_n8n_url')) {
     function notif_n8n_url(): string
     {
         return notif_getenv_non_empty('N8N_DATA_NOTIFICATION_URL')
-            ?? 'https://api.gnl-solution.fr/webhook/portail_api';
+            ?? 'https://n8n.gnl-cloud.us/webhook/portail_api';
     }
 }
 

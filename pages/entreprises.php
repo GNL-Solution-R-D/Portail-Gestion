@@ -78,6 +78,10 @@ $searchPlaceholder = t('Rechercher une entreprise…');
   <meta name="next-size-adjust" content=""/>
   <meta name="theme-color" content="#ffffff"/>
   <link rel="stylesheet" href="../assets/styles/connexion-style.css?dpl=dpl_67HPKFsXBSK8g98pV2ngjPFkZSfN" data-precedence="next"/>
+  <link rel="stylesheet" href="../assets/styles/gnl-portail.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/styles/gnl-portail.css') ?>"/>
+  <link rel="stylesheet" href="../assets/styles/gnl-gestion.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/styles/gnl-gestion.css') ?>"/>
+  <link rel="preload" href="/assets/gnl/fonts/Manrope-latin.woff2" as="font" type="font/woff2" crossorigin/>
+  <link rel="icon" href="/assets/gnl/img/favicon-32.png" sizes="32x32"/>
   <style>
     .dashboard-layout {display:flex;flex-direction:row;align-items:stretch;width:100%;min-height:calc(100vh - var(--app-header-height, 0px));min-height:calc(100dvh - var(--app-header-height, 0px));}
     .dashboard-sidebar {flex:0 0 20rem;width:20rem;max-width:20rem;}
@@ -152,7 +156,8 @@ $searchPlaceholder = t('Rechercher une entreprise…');
       <?php include('../include/menu.php'); ?>
     </aside>
     <main class="dashboard-main">
-      <div class="app-shell-offset-min-height w-full bg-surface p-6 space-y-6">
+      <div class="app-shell-offset-min-height w-full bg-surface p-6 ec-page gs-page">
+        <?php require_once __DIR__ . '/../include/page_head.php'; gnl_page_head('CLIENTS', 'Entreprises', "Organisations de l'Espace Client : coordonnées, membres et raccourcis vers leurs services."); ?>
 
         <section class="bg-background text-card-foreground rounded border py-4 shadow-sm">
           <div class="px-6 pb-4 border-b flex items-start justify-between gap-4 flex-wrap">
@@ -969,5 +974,11 @@ $searchPlaceholder = t('Rechercher une entreprise…');
   <script src="../assets/js/k8s_menu.js" defer></script>
   <!-- Dépliants de la barre latérale (dont « Client ») : cette page n'avait aucun contrôleur. -->
   <script src="../assets/js/collapsible.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/js/collapsible.js') ?>" defer></script>
+<script>
+  // /entreprises?add=1 (bouton « Ajouter une entreprise » du tableau de bord).
+  document.addEventListener('DOMContentLoaded', function () {
+    if (new URLSearchParams(location.search).get('add') === '1') { var b = document.getElementById('orgAddOpen'); if (b) setTimeout(function () { b.click(); }, 50); }
+  });
+</script>
 </body>
 </html>

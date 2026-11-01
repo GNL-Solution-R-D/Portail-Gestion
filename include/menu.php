@@ -102,162 +102,142 @@ $menu_csrf_token = (string)$_SESSION['csrf'];
 //  ⚠️ À ajuster selon votre infrastructure réelle (point de vérité unique).
 $gnl_nameservers = ['ns1.gnl-solution.fr', 'ns2.gnl-solution.fr', 'ns3.gnl-solution.fr'];
 $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placeholder
+// ── Barre latérale du Portail Gestion (maquette « Portail Gestion ») ─────────
+// Entrée active d'après le script servi ; ?org=<uuid> (filtre entreprise,
+// include/org_filter.php) conservé sur les pages qui savent filtrer.
+$menuPage = basename((string)($_SERVER['SCRIPT_FILENAME'] ?? $_SERVER['SCRIPT_NAME'] ?? ''), '.php');
+$menuGroups = [
+    'dashboard'     => ['dashboard'],
+    'entreprises'   => ['entreprises'],
+    'services'      => ['services', 'deployment', 'log'],
+    'gnl'           => ['services-gnl'],
+    'dns'           => ['serveurs-dns', 'zdns'],
+    'facturation'   => ['facture', 'abonnements', 'commande'],
+    'boutique'      => ['boutique'],
+    'equipe'        => ['equipes'],
+    'tickets'       => ['gestion-ticket'],
+    'documentation' => ['documentation'],
+];
+$menuActive = '';
+foreach ($menuGroups as $menuKey => $menuFiles) {
+    if (in_array($menuPage, $menuFiles, true)) { $menuActive = $menuKey; break; }
+}
+$menuOrg = trim((string)($_GET['org'] ?? ''));
+if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $menuOrg)) $menuOrg = '';
+$menuOrgQs = $menuOrg !== '' ? '?org=' . rawurlencode(strtolower($menuOrg)) : '';
+$menuLink = static function (string $key, string $href, string $label, string $extra = '', bool $keepOrg = false) use ($menuActive, $menuOrgQs): string {
+    $on = $menuActive === $key;
+    return '<a class="ec-nav__link' . ($on ? ' is-active' : '') . '" href="' . $href . ($keepOrg ? $menuOrgQs : '') . '"'
+        . ($on ? ' aria-current="page"' : '') . '>'
+        . '<svg class="ec-nav__mark" aria-hidden="true" width="9" height="16" viewBox="0 0 22 40"><path d="M13 0h9L9 40H0z"></path></svg>'
+        . '<span class="ec-nav__label">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</span>' . $extra . '</a>';
+};
+$menuT = static function (string $s): string { return function_exists('t') ? (string) t($s) : $s; };
+$menuE = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 ?>
-<div class="bg-background app-shell-offset-min-height flex h-full min-h-full w-full max-w-xs flex-col border shadow-sm dashboard-sidebar">
-<div class="px-6 pt-6"></div>
-<div class="flex-1 px-6 pb-6">
-<!-- ══════════════════════════════════════════════════════════════════
-     « Client » — repris de la nav « Mes services » du portail client
-     (Portail-Client-v2/include/menu.php). Les 5 dépliants sont masqués
-     par défaut et peuplés par assets/js/services_menu.js à partir de
-     data/services_menu_api.php ; une catégorie sans service reste masquée.
-══════════════════════════════════════════════════════════════════ -->
-<small class="text-muted-foreground mb-3 block text-xs font-bold tracking-wide uppercase">Client</small>
-<nav class="mb-4 space-y-0.5 border-b pb-4">
-<a class="text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center rounded-md px-2.5 py-2 transition-colors" href="./entreprises"><span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-users h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
-<span class="font-medium">Entreprises</span>
-</a>
-<div data-slot="collapsible" data-state="closed" data-services-block>
-<button aria-controls="sidebar-services-content" aria-expanded="false" class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors" data-slot="collapsible-trigger" data-state="closed" type="button">
-<span class="mr-2.5 grid shrink-0 place-items-center">
-  <svg class="lucide lucide-layout-grid h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
-    <rect height="7" rx="1" width="7" x="3" y="3"></rect>
-    <rect height="7" rx="1" width="7" x="14" y="3"></rect>
-    <rect height="7" rx="1" width="7" x="14" y="14"></rect>
-    <rect height="7" rx="1" width="7" x="3" y="14"></rect>
-  </svg>
-</span>
-<span class="font-medium">Services WEB</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
-</button>
-<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-services-content">
-<div id="web-services-list" class="mt-1 space-y-1">
-<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10" data-services-loading>Chargement…</div>
-</div>
-</div>
-</div>
-<!-- ══════════════════════════════════════════════════════════════════
-     Catégories de services supplémentaires (même structure que
-     « Services WEB » : le JS générique [data-slot="collapsible-trigger"]
-     des pages les prend en charge automatiquement).
-     Chaque conteneur (id=*-list) est prêt à être peuplé côté client.
-══════════════════════════════════════════════════════════════════ -->
-<div data-slot="collapsible" data-state="closed" data-services-block>
-<button aria-controls="sidebar-cloud-content" aria-expanded="false" class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors" data-slot="collapsible-trigger" data-state="closed" type="button">
-<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-cloud h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg></span><span class="font-medium">Services Cloud</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
-</button>
-<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-cloud-content">
-<div id="cloud-services-list" class="mt-1 space-y-1">
-<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Aucun service</div>
-</div>
-</div>
-</div>
-<div data-slot="collapsible" data-state="closed" data-services-block>
-<button aria-controls="sidebar-specifiques-content" aria-expanded="false" class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors" data-slot="collapsible-trigger" data-state="closed" type="button">
-<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-settings-2 h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M20 7h-9"></path><path d="M14 17H5"></path><circle cx="17" cy="17" r="3"></circle><circle cx="7" cy="7" r="3"></circle></svg></span><span class="font-medium">Services Spécifiques</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
-</button>
-<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-specifiques-content">
-<div id="specific-services-list" class="mt-1 space-y-1">
-<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Aucun service</div>
-</div>
-</div>
-</div>
-<div data-slot="collapsible" data-state="closed" data-services-block>
-<button aria-controls="sidebar-vps-content" aria-expanded="false" class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors" data-slot="collapsible-trigger" data-state="closed" type="button">
-<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-layers h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"></path><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"></path><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"></path></svg></span><span class="font-medium">Serveurs Virtualisés</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
-</button>
-<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-vps-content">
-<div id="virtual-servers-list" class="mt-1 space-y-1">
-<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Aucun service</div>
-</div>
-</div>
-</div>
-<div data-slot="collapsible" data-state="closed" data-services-block>
-<button aria-controls="sidebar-dedicated-content" aria-expanded="false" class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors" data-slot="collapsible-trigger" data-state="closed" type="button">
-<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-server h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><rect height="8" rx="2" ry="2" width="20" x="2" y="2"></rect><rect height="8" rx="2" ry="2" width="20" x="2" y="14"></rect><line x1="6" x2="6.01" y1="6" y2="6"></line><line x1="6" x2="6.01" y1="18" y2="18"></line></svg></span><span class="font-medium">Serveurs Dédiés</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
-</button>
-<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-dedicated-content">
-<div id="dedicated-servers-list" class="mt-1 space-y-1">
-<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10">Aucun service</div>
-</div>
-</div>
-</div>
-</nav>
-<small class="text-muted-foreground mb-3 block text-xs font-bold tracking-wide uppercase">Techenique</small>
-<nav class="mb-4 space-y-0.5 border-b pb-4">
-<div data-slot="collapsible" data-state="closed">
-<button aria-controls="sidebar-gnl-services-content" aria-expanded="false" class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors" data-slot="collapsible-trigger" data-state="closed" type="button">
-<span class="mr-2.5 grid shrink-0 place-items-center">
-  <svg class="lucide lucide-layout-grid h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
-    <rect height="7" rx="1" width="7" x="3" y="3"></rect>
-    <rect height="7" rx="1" width="7" x="14" y="3"></rect>
-    <rect height="7" rx="1" width="7" x="14" y="14"></rect>
-    <rect height="7" rx="1" width="7" x="3" y="14"></rect>
-  </svg>
-</span>
-<span class="font-medium">Les services GNL</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
-</button>
-<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-gnl-services-content">
-<div id="k8s-deployments" class="mt-1 space-y-1" data-gnl-services>
-<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10" data-deployments-loading>Chargement…</div>
-</div>
-</div>
+<div class="ec-side" id="appSidebar">
+  <a class="ec-side__logo" href="/dashboard" aria-label="GNL Solution — Tableau de bord">
+    <img src="/assets/gnl/img/logo-gnl-marine.svg" alt="GNL Solution" width="188" height="54">
+  </a>
+  <span class="ec-side__badge">PORTAIL GESTION</span>
+
+  <label class="ec-orgfilter">
+    <span class="ec-orgfilter__label">FILTRER PAR ENTREPRISE</span>
+    <select id="menuOrgFilter" data-current="<?php echo $menuE($menuOrg); ?>">
+      <option value="">Toutes les entreprises</option>
+      <?php if ($menuOrg !== ''): ?><option value="<?php echo $menuE($menuOrg); ?>" selected>Entreprise filtrée</option><?php endif; ?>
+    </select>
+  </label>
+
+  <nav class="ec-nav" aria-label="Portail Gestion">
+    <div class="ec-nav__group">
+      <p class="ec-nav__title">CLIENTS</p>
+      <?php echo $menuLink('dashboard', '/dashboard', 'Tableau de bord'); ?>
+      <?php echo $menuLink('entreprises', '/entreprises', 'Entreprises', '<span class="ec-nav__count" data-count-orgs hidden></span>'); ?>
+      <?php echo $menuLink('services', '/services', 'Services clients', '', true); ?>
+    </div>
+
+    <div class="ec-nav__group">
+      <p class="ec-nav__title">TECHNIQUE</p>
+      <?php echo $menuLink('gnl', '/services-gnl', 'Services GNL'); ?>
+      <?php echo $menuLink('dns', '/serveurs-dns', 'Serveurs DNS'); ?>
+    </div>
+
+    <div class="ec-nav__group">
+      <p class="ec-nav__title">ADMINISTRATION</p>
+      <?php echo $menuLink('facturation', '/facture', 'Facturation clients', '', true); ?>
+      <?php echo $menuLink('boutique', '/boutique', 'Boutique'); ?>
+      <?php echo $menuLink('equipe', '/equipes', 'Équipe GNL'); ?>
+    </div>
+
+    <div class="ec-nav__group">
+      <p class="ec-nav__title">SUPPORT</p>
+      <?php echo $menuLink('tickets', '/gestion-ticket', 'Tickets', '<span class="ec-nav__count ec-nav__count--alert" data-count-tickets hidden></span>', true); ?>
+      <?php echo $menuLink('documentation', '/documentation', 'Documentation'); ?>
+    </div>
+  </nav>
+
+  <div class="ec-side__foot">
+    <a href="/services-gnl" class="ec-side__status"><span class="ec-dot" aria-hidden="true"></span>État des services GNL</a>
+    <p><a href="https://b2b-portal.eu.gnl-solution.com" target="_blank" rel="noopener">Ouvrir l'Espace Client</a></p>
+  </div>
+
+  <!-- Conteneurs historiques, alimentés par assets/js/services_menu.js et le
+       script de ce fichier : gardés invisibles pour que ces scripts tournent
+       sans erreur ; l'affichage passe désormais par les pages dédiées. -->
+  <div hidden aria-hidden="true" data-legacy-menu>
+    <div data-slot="collapsible" data-services-block><div id="sidebar-services-content"><div id="web-services-list"></div></div></div>
+    <div data-slot="collapsible" data-services-block><div id="sidebar-cloud-content"><div id="cloud-services-list"></div></div></div>
+    <div data-slot="collapsible" data-services-block><div id="sidebar-specifiques-content"><div id="specific-services-list"></div></div></div>
+    <div data-slot="collapsible" data-services-block><div id="sidebar-vps-content"><div id="virtual-servers-list"></div></div></div>
+    <div data-slot="collapsible" data-services-block><div id="sidebar-dedicated-content"><div id="dedicated-servers-list"></div></div></div>
+    <div id="sidebar-gnl-services-content"><div id="k8s-deployments" data-gnl-services></div></div>
+    <div id="sidebar-dns-content"><div id="dns-servers-list"></div></div>
+  </div>
 </div>
 
-<div data-slot="collapsible" data-state="closed">
-<button aria-controls="sidebar-dns-content" aria-expanded="false" class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors" data-slot="collapsible-trigger" data-state="closed" type="button">
-<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-layout-grid h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><rect height="7" rx="1" width="7" x="3" y="3"></rect><rect height="7" rx="1" width="7" x="14" y="3"></rect><rect height="7" rx="1" width="7" x="14" y="14"></rect><rect height="7" rx="1" width="7" x="3" y="14"></rect></svg></span><span class="font-medium">Serveurs DNS</span><span class="ml-auto grid shrink-0 place-items-center pl-2.5"><svg class="lucide lucide-chevron-right h-4 w-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg></span>
-</button>
-<div class="mt-1 space-y-1" data-slot="collapsible-content" data-state="closed" hidden="" id="sidebar-dns-content">
-<!-- Liste des serveurs DNS — peuplée depuis n8n via le proxy
-     (action=dns_server.list, GET). -->
-<div id="dns-servers-list" class="space-y-0.5">
-<div class="text-muted-foreground text-xs px-2.5 py-1 pl-10" data-dns-loading>Chargement…</div>
-</div>
-<!-- ══════════════════════════════════════════════════════════════════════
-     « Ajouter un Domaine » — ouvre l'assistant (modal). Toujours visible.
-══════════════════════════════════════════════════════════════════════ -->
-<button type="button" data-add-dns-server-open class="text-muted-foreground hover:text-foreground hover:bg-secondary flex w-full items-center rounded-md px-2.5 py-2 transition-colors text-left">
-<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-package h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><polyline points="3.29 7 12 12 20.71 7"></polyline><path d="m7.5 4.27 9 5.15"></path></svg></span>
-<span class="text-sm truncate">Ajouter un serveur</span>
-</button>
-</div>
-</div>
-</nav>
-<small class="text-muted-foreground mb-3 block text-xs font-bold tracking-wide uppercase">Administration</small>
-<nav class="mb-4 space-y-0.5 border-b pb-4">
-<a class="text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center rounded-md px-2.5 py-2 transition-colors" href="./equipes"><span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-users h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
-<span class="font-medium">Equipes</span>
-</a>
-<a class="text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center rounded-md px-2.5 py-2 transition-colors" href="./commande">
-<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-package h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><polyline points="3.29 7 12 12 20.71 7"></polyline><path d="m7.5 4.27 9 5.15"></path></svg></span>
-<span class="font-medium">Suivi commandes</span>
-</a>
-<a class="text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center rounded-md px-2.5 py-2 transition-colors" href="./facture">
-<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-receipt h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2"></path><path d="M16 8h-8"></path><path d="M16 12h-8"></path><path d="M12 16h-4"></path></svg></span>
-<span class="font-medium">Facturation Clients</span>
-</a>
-<a class="text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center rounded-md px-2.5 py-2 transition-colors" href="./abonnements">
-<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-refresh-cw h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15.55-6.36L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15.55 6.36L3 16"></path></svg></span>
-<span class="font-medium">Abonnements</span>
-</a>
-</nav>
-<small class="text-muted-foreground mb-3 block text-xs font-bold tracking-wide uppercase">Support</small>
-<nav class="space-y-0.5">
-<a class="text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center rounded-md px-2.5 py-2 transition-colors" href="./documentation">
-<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-headphones h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"></path></svg></span>
-<span class="font-medium">Documentation</span>
-</a>
-<a class="text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center rounded-md px-2.5 py-2 transition-colors" href="./gestion-ticket">
-<span class="mr-2.5 grid shrink-0 place-items-center"><svg class="lucide lucide-headphones h-5 w-5" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"></path></svg></span>
-<span class="font-medium">Gestion Tickets</span>
-</a>
-</nav>
-</div>
-<div class="mt-auto p-6 pt-0">
-<div class="bg-border shrink-0 data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px my-6" data-orientation="horizontal" data-slot="separator" role="none"></div>
-<small class="text-muted-foreground block text-center text-sm">GNL Solution</small>
-</div>
-</div>
+<script>
+(function () {
+  // Filtre entreprise : liste des organisations (org.list), puis rechargement
+  // de la page courante avec ?org=<uuid> (lu par include/org_filter.php).
+  var sel = document.getElementById('menuOrgFilter');
+  if (!sel) return;
+  var current = sel.getAttribute('data-current') || '';
+  fetch('/data/portail_api.php?action=org.list', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var list = (d && d.ok && Array.isArray(d.orgs)) ? d.orgs : [];
+      var badge = document.querySelector('[data-count-orgs]');
+      var total = (d && d.count) ? d.count : list.length;
+      if (badge && total) { badge.textContent = String(total); badge.hidden = false; }
+      var opts = '<option value="">Toutes les entreprises</option>';
+      list.forEach(function (o) {
+        var id = String(o.id || '');
+        var label = String(o.label || o.name || id);
+        if (!id) return;
+        opts += '<option value="' + id.replace(/"/g, '&quot;') + '"' + (id.toLowerCase() === current.toLowerCase() ? ' selected' : '') + '>'
+          + label.replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }) + '</option>';
+      });
+      sel.innerHTML = opts;
+    })
+    .catch(function () { /* liste indisponible : le filtre reste « Toutes » */ });
+  sel.addEventListener('change', function () {
+    var u = new URL(window.location.href);
+    if (sel.value) u.searchParams.set('org', sel.value); else u.searchParams.delete('org');
+    window.location.href = u.pathname + (u.search ? u.search : '');
+  });
+  // Pastille « Tickets » : nombre de tickets ouverts (console support).
+  fetch('/data/portail_api.php?action=support.ticket.list', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var rows = (d && Array.isArray(d.tickets)) ? d.tickets : [];
+      var open = rows.filter(function (t) { var s = String(t.status || t.statut || '').toLowerCase(); return s === '' || s === 'ouvert' || s === 'open' || s === 'en_cours' || s === 'in_progress' || s === 'en_attente'; }).length;
+      var b = document.querySelector('[data-count-tickets]');
+      if (b && open > 0) { b.textContent = String(open); b.hidden = false; }
+    })
+    .catch(function () {});
+})();
+</script>
 
 <!-- Dépliants « Client » : peuplés par assets/js/services_menu.js (garde anti double chargement). -->
 <script src="../assets/js/services_menu.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/assets/js/services_menu.js') ?>" defer></script>
@@ -1557,4 +1537,4 @@ $gnl_dns_target  = '203.0.113.10'; // IP/cible de l'Ingress public — placehold
     refreshDeployments();  // peuple « Mes services » + applique les renommages n8n
   });
 })();
-</script>
+</script>

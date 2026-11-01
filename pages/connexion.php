@@ -122,7 +122,7 @@ gnl_auth_head('Connexion', 'connexion');
         <label for="username">E-mail ou identifiant</label>
         <input class="gnl-in" type="text" id="username" name="username" value="<?php echo $prefEmail; ?>"
                autocomplete="username" autocapitalize="none" spellcheck="false"
-               placeholder="vous@exemple.fr" required autofocus>
+               placeholder="prenom.nom@gnl-solution.com" required autofocus>
       </div>
 
       <div class="gnl-field">

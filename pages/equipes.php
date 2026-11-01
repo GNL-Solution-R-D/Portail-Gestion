@@ -65,6 +65,10 @@ $searchPlaceholder = t('Rechercher un membre…');
   <meta name="next-size-adjust" content=""/>
   <meta name="theme-color" content="#ffffff"/>
   <link rel="stylesheet" href="../assets/styles/connexion-style.css?dpl=dpl_67HPKFsXBSK8g98pV2ngjPFkZSfN" data-precedence="next"/>
+  <link rel="stylesheet" href="../assets/styles/gnl-portail.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/styles/gnl-portail.css') ?>"/>
+  <link rel="stylesheet" href="../assets/styles/gnl-gestion.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/styles/gnl-gestion.css') ?>"/>
+  <link rel="preload" href="/assets/gnl/fonts/Manrope-latin.woff2" as="font" type="font/woff2" crossorigin/>
+  <link rel="icon" href="/assets/gnl/img/favicon-32.png" sizes="32x32"/>
   <style>
     .dashboard-layout {display:flex;flex-direction:row;align-items:stretch;width:100%;min-height:calc(100vh - var(--app-header-height, 0px));min-height:calc(100dvh - var(--app-header-height, 0px));}
     .dashboard-sidebar {flex:0 0 20rem;width:20rem;max-width:20rem;}
@@ -93,7 +97,8 @@ $searchPlaceholder = t('Rechercher un membre…');
       <?php include('../include/menu.php'); ?>
     </aside>
     <main class="dashboard-main">
-      <div class="app-shell-offset-min-height w-full bg-surface p-6 space-y-6">
+      <div class="app-shell-offset-min-height w-full bg-surface p-6 ec-page gs-page">
+        <?php require_once __DIR__ . '/../include/page_head.php'; gnl_page_head('ADMINISTRATION', 'Équipe GNL', 'Le personnel de GNL Solution, lu dans Keycloak. Les comptes se gèrent dans la console Keycloak.'); ?>
         <div class="bg-background text-card-foreground flex flex-col gap-3 rounded-xl border py-6 shadow-sm">
           <div class="px-6">
             <h1 class="text-lg font-semibold"><?= t('Membres de la structure') ?></h1>
