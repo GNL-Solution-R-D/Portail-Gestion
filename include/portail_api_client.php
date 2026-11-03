@@ -23,7 +23,7 @@ declare(strict_types=1);
 
 if (!defined('PORTAIL_API_DEFAULT_URL')) {
     // Repli si la variable d'environnement N8N_DATA_PORTAIL_URL est absente.
-    define('PORTAIL_API_DEFAULT_URL', 'https://n8n.gnl-cloud.us/webhook/data-portail');
+    define('PORTAIL_API_DEFAULT_URL', 'https://n8n.gnl-cloud.us/webhook/portail-gestion');
 }
 
 if (!function_exists('portailApiEnvNonEmpty')) {
