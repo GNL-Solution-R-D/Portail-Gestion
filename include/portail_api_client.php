@@ -3,7 +3,7 @@
 /**
  * include/portail_api_client.php
  *
- * Client serveur PARTAGÉ vers le webhook n8n « data-portail ».
+ * Client serveur PARTAGÉ vers le webhook n8n « portail-gestion-infrastructure ».
  *
  * Centralise la logique de transport historiquement embarquée dans
  * data/portail_api.php (fonction n8n_call) afin qu'elle soit réutilisable
@@ -22,7 +22,8 @@
 declare(strict_types=1);
 
 if (!defined('PORTAIL_API_DEFAULT_URL')) {
-    // Repli si la variable d'environnement N8N_DATA_PORTAIL_URL est absente.
+    // Webhook UNIQUE du Portail Gestion (≠ « data-portail » de l'Espace Client).
+    // Surcharge possible : N8N_GESTION_URL, puis N8N_DATA_PORTAIL_URL.
     define('PORTAIL_API_DEFAULT_URL', 'https://n8n.gnl-cloud.us/webhook/portail-gestion-infrastructure');
 }
 
@@ -42,7 +43,9 @@ if (!function_exists('portailApiEnvNonEmpty')) {
 if (!function_exists('portailApiUrl')) {
     function portailApiUrl(): string
     {
-        return portailApiEnvNonEmpty('N8N_DATA_PORTAIL_URL') ?? PORTAIL_API_DEFAULT_URL;
+        return portailApiEnvNonEmpty('N8N_GESTION_URL')
+            ?? portailApiEnvNonEmpty('N8N_DATA_PORTAIL_URL')
+            ?? PORTAIL_API_DEFAULT_URL;
     }
 }
 
@@ -480,7 +483,7 @@ if (!function_exists('portailExtractStatsByDeployment')) {
 
 if (!function_exists('portailFetchDashboardStats')) {
     /**
-     * Récupère, via le pipeline n8n data-portail (action "stats.dashboard"),
+     * Récupère, via le webhook n8n du portail (action "stats.dashboard"),
      * les statistiques de requêtes/visites PAR deployment du client courant.
      *
      * Remplace l'ancien fetch DIRECT des sidecars
@@ -550,7 +553,7 @@ if (!function_exists('portailFetchDashboardStats')) {
 if (!function_exists('portailEnsureTeamMembership')) {
     /**
      * Alimente (idempotent) la table « team » pour l'utilisateur fourni,
-     * via le pipeline n8n data-portail (action "team.ensure").
+     * via le webhook n8n du portail (action "team.ensure").
      *
      * @return array{status:int, json:mixed, raw:string}
      * @throws RuntimeException si client_id absent ou si n8n est injoignable

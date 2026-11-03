@@ -156,7 +156,8 @@ header('X-Content-Type-Options: nosniff');
 // ══════════════════════════════════════════════════════════════════════════════
 //  Configuration : UN SEUL webhook n8n, toujours en POST.
 // ══════════════════════════════════════════════════════════════════════════════
-const N8N_PORTAIL_URL = 'https://n8n.gnl-cloud.us/webhook/portail-gestion-infrastructure';
+// URL : include/portail_api_client.php → portailApiUrl()
+//   (défaut https://n8n.gnl-cloud.us/webhook/portail-gestion-infrastructure).
 
 // ── Contrôle d'accès « support » (console gestion-ticket.php) ──────────────────
 // Si CE déploiement est entièrement dédié au support (tous les comptes connectés

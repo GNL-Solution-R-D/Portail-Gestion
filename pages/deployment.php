@@ -704,7 +704,8 @@ $pageTitle = $deploymentName;
 <script>
 (async () => {
   try {
-    const res = await fetch('../data/deployments_api.php?action=list', {
+    // Webhook unique du portail (action deployment.list) — même format de réponse.
+    const res = await fetch('../data/portail_api.php?action=deployment.list', {
       credentials: 'same-origin'
     });
 

@@ -10,7 +10,7 @@
  *   - pages/deployment.php         → résolution d'un ?product_uid= + contrôle d'accès
  *   - data/ptero_api.php           → contrôle d'accès avant tout appel Pterodactyl
  *
- * Chaîne d'appels n8n (webhook unique « data-portail », via portailApiCall) :
+ * Chaîne d'appels n8n (webhook unique « portail-gestion-infrastructure », via portailApiCall) :
  *
  *   1) order.list      → commandes du client → références (« ref »)
  *   2) order.product   → lignes de chaque commande, filtrées sur

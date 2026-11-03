@@ -5,6 +5,11 @@ Interface alignée sur la maquette « Portail Gestion » (même charte que l'Esp
 
 Toutes les données passent par `data/portail_api.php`, qui relaie vers le webhook n8n
 `https://n8n.gnl-cloud.us/webhook/portail-gestion-infrastructure` (POST JSON, champ `action`).
+Surcharge : variable d'environnement `N8N_GESTION_URL` (prioritaire), puis `N8N_DATA_PORTAIL_URL`.
+⚠️ Si le serveur reprend la configuration de l'Espace Client avec `N8N_DATA_PORTAIL_URL=…/data-portail`,
+retirez-la ou définissez `N8N_GESTION_URL`, sinon le portail parlera au webhook de l'Espace Client.
+Seul le téléchargement des PDF de factures utilise un autre webhook (`N8N_DATA_INVOICE_URL`, défaut `…/webhook/data-invoice`, en GET).
+
 Les écritures exigent un POST navigateur avec l'en-tête `X-CSRF-Token` (`$_SESSION['csrf']`).
 
 ## Pages
